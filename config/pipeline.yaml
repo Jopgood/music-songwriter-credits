@@ -1,0 +1,78 @@
+# Songwriter Identification Pipeline Configuration
+
+# General settings
+general:
+  batch_size: 100
+  log_level: INFO
+  confidence_threshold: 0.85
+  manual_review_threshold: 0.65
+
+# External API configurations
+apis:
+  musicbrainz:
+    app_name: "SongwriterID"
+    version: "0.1.0"
+    contact: "admin@example.com"
+    rate_limit_delay: 1.5  # seconds between requests to avoid rate limiting
+
+  acoustid:
+    # API key should be set in .env file as ACOUSTID_API_KEY
+    rate_limit_delay: 1.0  # seconds between requests to avoid rate limiting
+
+  ascap:
+    # API key should be set in .env file as ASCAP_API_KEY
+    rate_limit_delay: 1.0  # seconds between requests 
+
+  bmi:
+    # API key should be set in .env file as BMI_API_KEY
+    rate_limit_delay: 1.0  # seconds between requests
+
+# Database configuration
+database:
+  # Connection string should be set in .env file as DATABASE_URL
+  # or provided directly to the pipeline
+  pool_size: 5
+  max_overflow: 10
+  echo: false  # Set to true for SQL query logging
+
+# Tiered identification settings
+tiers:
+  tier1:
+    enabled: true
+    sources:
+      - musicbrainz
+      - ascap
+      - bmi
+    min_confidence: 0.8
+
+  tier2:
+    enabled: true
+    sources:
+      - entity_resolution
+      - songwriter_prediction
+    min_confidence: 0.7
+    ml_models:
+      entity_resolution_model: "models/entity_resolution.joblib"
+      songwriter_prediction_model: "models/songwriter_prediction.joblib"
+
+  tier3:
+    enabled: true
+    sources:
+      - acoustid
+      - audio_fingerprinting
+    min_confidence: 0.6
+    audio:
+      sample_rate: 22050
+      feature_extraction:
+        mfcc_coefficients: 13
+        chroma_normalize: true
+
+  tier4:
+    enabled: true
+    manual_review_interface: true
+
+# File paths configuration
+paths:
+  audio_base_path: "/path/to/audio/files"  # Base path for audio files
+  ml_models_path: "models"  # Path to save/load ML models
+  log_file: "logs/pipeline.log"  # Log file path
