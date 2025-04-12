@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: songwriter-id-app
+    volumes:
+      - .:/app
+      - audio_data:/audio_data
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://songwriter:password@db:5432/songwriter_db
+      - MUSICBRAINZ_API_KEY=${MUSICBRAINZ_API_KEY:-}
+      - ACOUSTID_API_KEY=${ACOUSTID_API_KEY:-}
+      - ASCAP_API_KEY=${ASCAP_API_KEY:-}
+      - BMI_API_KEY=${BMI_API_KEY:-}
+    ports:
+      - "5000:5000"
+    networks:
+      - songwriter-network
+    command: python -m songwriter_id.pipeline
+
+  db:
+    image: postgres:14-alpine
+    container_name: songwriter-id-db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=songwriter
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=songwriter_db
+    ports:
+      - "5432:5432"
+    networks:
+      - songwriter-network
+    restart: always
+
+  review-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: songwriter-id-ui
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://songwriter:password@db:5432/songwriter_db
+      - FLASK_APP=songwriter_id.review_interface
+      - FLASK_ENV=development
+    ports:
+      - "8000:5000"
+    networks:
+      - songwriter-network
+    command: python -m songwriter_id.review_interface
+
+networks:
+  songwriter-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  audio_data:
