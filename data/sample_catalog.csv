@@ -1,0 +1,21 @@
+title,artist,release,duration,audio_path
+Imagine,John Lennon,Imagine,3:04,/audio_data/john_lennon_imagine.mp3
+Hey Jude,The Beatles,Hey Jude,7:11,/audio_data/beatles_hey_jude.mp3
+Bohemian Rhapsody,Queen,A Night at the Opera,5:55,/audio_data/queen_bohemian_rhapsody.mp3
+Billie Jean,Michael Jackson,Thriller,4:54,/audio_data/michael_jackson_billie_jean.mp3
+Like a Rolling Stone,Bob Dylan,Highway 61 Revisited,6:13,/audio_data/bob_dylan_like_a_rolling_stone.mp3
+Good Vibrations,The Beach Boys,Smiley Smile,3:39,/audio_data/beach_boys_good_vibrations.mp3
+Purple Haze,Jimi Hendrix,Are You Experienced,2:50,/audio_data/jimi_hendrix_purple_haze.mp3
+Johnny B. Goode,Chuck Berry,Chuck Berry Is on Top,2:41,/audio_data/chuck_berry_johnny_b_goode.mp3
+Respect,Aretha Franklin,I Never Loved a Man the Way I Love You,2:28,/audio_data/aretha_franklin_respect.mp3
+Smells Like Teen Spirit,Nirvana,Nevermind,5:01,/audio_data/nirvana_smells_like_teen_spirit.mp3
+Yesterday,The Beatles,Help!,2:05,/audio_data/beatles_yesterday.mp3
+What's Going On,Marvin Gaye,What's Going On,3:53,/audio_data/marvin_gaye_whats_going_on.mp3
+Sweet Child o' Mine,Guns N' Roses,Appetite for Destruction,5:55,/audio_data/guns_n_roses_sweet_child_o_mine.mp3
+London Calling,The Clash,London Calling,3:19,/audio_data/the_clash_london_calling.mp3
+Waterloo Sunset,The Kinks,Something Else by The Kinks,3:18,/audio_data/the_kinks_waterloo_sunset.mp3
+All Along the Watchtower,Jimi Hendrix,Electric Ladyland,4:01,/audio_data/jimi_hendrix_all_along_the_watchtower.mp3
+God Only Knows,The Beach Boys,Pet Sounds,2:55,/audio_data/beach_boys_god_only_knows.mp3
+A Change Is Gonna Come,Sam Cooke,Ain't That Good News,3:13,/audio_data/sam_cooke_a_change_is_gonna_come.mp3
+House of the Rising Sun,The Animals,The Animals,4:29,/audio_data/the_animals_house_of_the_rising_sun.mp3
+Superstition,Stevie Wonder,Talking Book,4:26,/audio_data/stevie_wonder_superstition.mp3
