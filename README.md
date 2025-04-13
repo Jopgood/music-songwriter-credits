@@ -70,7 +70,7 @@ The system follows a modular pipeline architecture that processes tracks sequent
 2. Create and activate a virtual environment:
    ```
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
    ```
 
 3. Install dependencies:
@@ -101,7 +101,40 @@ The system follows a modular pipeline architecture that processes tracks sequent
 
 ## Usage
 
-### Processing a Catalog
+### Importing a Music Catalog
+
+The system now includes a robust data ingestion pipeline for importing music catalogs. You can use the command-line script:
+
+```bash
+python scripts/import_catalog.py path/to/catalog.csv --audio-path /path/to/audio/files
+```
+
+Options:
+- `--config`: Path to the configuration file (default: config/pipeline.yaml)
+- `--db`: Database connection string
+- `--audio-path`: Base path for audio files
+- `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR)
+
+The script will:
+1. Parse the catalog file (CSV or Excel)
+2. Normalize track metadata (titles, artist names)
+3. Import tracks into the database
+4. Process tracks through the identification tiers
+
+### Supported Catalog Formats
+
+The data ingestion pipeline supports:
+- CSV files with various delimiters (auto-detected)
+- Excel files (.xlsx, .xls)
+
+The system will automatically map common column names to standardized fields:
+- Title: 'title', 'track_title', 'track name', 'name'
+- Artist: 'artist', 'artist_name', 'performer'
+- Album: 'album', 'release', 'release_title'
+- Duration: 'duration', 'length', 'time'
+- Audio Path: 'file', 'path', 'audio_path'
+
+### Processing a Catalog Programmatically
 
 ```python
 from songwriter_id.pipeline import SongwriterIdentificationPipeline
@@ -113,10 +146,14 @@ pipeline = SongwriterIdentificationPipeline(
 )
 
 # Process a catalog
-pipeline.process_catalog(
+stats = pipeline.process_catalog(
     catalog_path="path/to/catalog.csv",
     audio_base_path="/path/to/audio/files"
 )
+
+# Check the results
+print(f"Tracks added: {stats['import']['tracks_added']}")
+print(f"Tier 1 identified: {stats['identification']['tier1_identified']}")
 ```
 
 ### Running the Manual Review Interface
@@ -132,19 +169,27 @@ Then navigate to http://localhost:5000 in your browser.
 ```
 music-songwriter-credits/
 ├── config/                     # Configuration files
+│   └── pipeline.yaml           # Pipeline configuration
 ├── data/                       # Sample data and database migrations
 ├── docs/                       # Documentation and diagrams
 ├── notebooks/                  # Jupyter notebooks for exploration
 ├── scripts/                    # Utility scripts
+│   └── import_catalog.py       # Catalog import script
 ├── songwriter_id/              # Main package
 │   ├── __init__.py
 │   ├── api/                    # API integration modules
 │   ├── audio/                  # Audio processing modules
+│   ├── data_ingestion/         # Data ingestion components
+│   │   ├── __init__.py
+│   │   ├── parser.py           # Catalog file parser
+│   │   ├── normalizer.py       # Track metadata normalizer
+│   │   └── importer.py         # Database importer
 │   ├── database/               # Database models and utilities
 │   ├── ml/                     # Machine learning components
 │   ├── pipeline.py             # Main pipeline implementation
 │   └── review_interface/       # Manual review UI
 ├── tests/                      # Test suite
+│   └── test_data_ingestion.py  # Tests for data ingestion
 ├── .env.example                # Example environment variables
 ├── docker-compose.yml          # Docker composition
 ├── Dockerfile                  # Docker configuration

@@ -280,7 +280,7 @@ class SongwriterIdentificationPipeline:
         result_text = "No results found"
         if identified_credits:
             result_text = f"Found {len(identified_credits)} credits"
-            
+           
         self._record_identification_attempt(
             track_id=track.track_id,
             source_used="tier1_metadata",
