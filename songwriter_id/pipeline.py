@@ -15,13 +15,22 @@ from songwriter_id.data_ingestion.parser import CatalogParser
 from songwriter_id.data_ingestion.normalizer import TrackNormalizer
 from songwriter_id.data_ingestion.importer import CatalogImporter
 
+# Import MusicBrainz clients
+from songwriter_id.api.musicbrainz import MusicBrainzClient
+
+# Try to import database client
+try:
+    from songwriter_id.api.musicbrainz_db import MusicBrainzDatabaseClient
+    MUSICBRAINZ_DB_AVAILABLE = True
+except ImportError:
+    MUSICBRAINZ_DB_AVAILABLE = False
+    logging.warning("MusicBrainzDatabaseClient not available. Direct database access will be disabled.")
+
 # Make acoustid optional
 try:
-    from songwriter_id.api import MusicBrainzClient, AcoustIDClient
+    from songwriter_id.api import AcoustIDClient
     ACOUSTID_AVAILABLE = True
 except ImportError:
-    # If acoustid/chromaprint is not available, just import MusicBrainzClient
-    from songwriter_id.api.musicbrainz import MusicBrainzClient
     ACOUSTID_AVAILABLE = False
     logging.warning("AcoustID/Chromaprint not available. Tier 3 audio fingerprinting will be disabled.")
 
@@ -86,18 +95,48 @@ class SongwriterIdentificationPipeline:
     
     def _init_api_clients(self):
         """Initialize API clients based on configuration."""
-        # Initialize MusicBrainz client if enabled
+        # Initialize MusicBrainz client
         self.mb_client = None
         mb_config = self.config.get('apis', {}).get('musicbrainz', {})
+        
         if mb_config.get('enabled', False):
-            logger.info("Initializing MusicBrainz client")
-            self.mb_client = MusicBrainzClient(
-                app_name=mb_config.get('user_agent', 'SongwriterCreditsIdentifier'),
-                version=mb_config.get('version', '1.0'),
-                contact=mb_config.get('contact', 'contact@example.com'),
-                rate_limit=mb_config.get('rate_limit', 1.0),
-                retries=mb_config.get('retries', 3)
-            )
+            client_type = mb_config.get('client_type', 'api')
+            
+            if client_type == 'database' and MUSICBRAINZ_DB_AVAILABLE:
+                # Use database client if configured and available
+                db_config = mb_config.get('database', {})
+                if db_config.get('enabled', True):
+                    logger.info("Initializing MusicBrainz Database client")
+                    
+                    # Get connection parameters from config
+                    db_connection_string = db_config.get('connection_string')
+                    pool_size = db_config.get('pool_size', 5)
+                    max_overflow = db_config.get('max_overflow', 10)
+                    
+                    if db_connection_string:
+                        self.mb_client = MusicBrainzDatabaseClient(
+                            db_connection_string=db_connection_string,
+                            pool_size=pool_size,
+                            max_overflow=max_overflow
+                        )
+                    else:
+                        logger.error("MusicBrainz database client enabled but no connection string provided")
+                
+            elif client_type == 'api' or (client_type == 'database' and not MUSICBRAINZ_DB_AVAILABLE):
+                # Use API client
+                if client_type == 'database' and not MUSICBRAINZ_DB_AVAILABLE:
+                    logger.warning("MusicBrainzDatabaseClient not available, falling back to API client")
+                
+                api_config = mb_config.get('api', {})
+                if api_config.get('enabled', True):
+                    logger.info("Initializing MusicBrainz API client")
+                    self.mb_client = MusicBrainzClient(
+                        app_name=api_config.get('user_agent', 'SongwriterCreditsIdentifier'),
+                        version=api_config.get('version', '1.0'),
+                        contact=api_config.get('contact', 'contact@example.com'),
+                        rate_limit=api_config.get('rate_limit', 1.0),
+                        retries=api_config.get('retries', 3)
+                    )
         
         # Initialize AcoustID client if enabled and available
         self.acoustid_client = None
@@ -107,7 +146,6 @@ class SongwriterIdentificationPipeline:
             api_key = acoustid_config.get('api_key', '')
             if api_key:
                 try:
-                    from songwriter_id.api import AcoustIDClient
                     self.acoustid_client = AcoustIDClient(api_key)
                 except ImportError:
                     logger.warning("AcoustID client initialization failed - library not available")
@@ -265,6 +303,10 @@ class SongwriterIdentificationPipeline:
         
         # Try MusicBrainz if enabled
         if 'musicbrainz' in tier1_sources and self.mb_client:
+            # Determine which client is being used (API or DB) for logging
+            client_type = "Database" if isinstance(self.mb_client, MusicBrainzDatabaseClient) else "API"
+            logger.info(f"Using MusicBrainz {client_type} client for identification")
+            
             mb_credits = self._try_musicbrainz_identification(track)
             
             if mb_credits:
@@ -315,7 +357,7 @@ class SongwriterIdentificationPipeline:
         """
         logger.info(f"Trying MusicBrainz identification for '{track.title}' by '{track.artist_name}'")
         try:
-            # Get songwriter credits by title and artist
+            # Get songwriter credits by title and artist - both client types use the same method signature
             credits = self.mb_client.get_credits_by_title_artist(
                 title=track.title,
                 artist=track.artist_name,
@@ -330,10 +372,13 @@ class SongwriterIdentificationPipeline:
             else:
                 logger.info(f"No MusicBrainz credits found for '{track.title}' by '{track.artist_name}'")
             
+            # Determine client type for logging
+            client_type = "musicbrainz_db" if isinstance(self.mb_client, MusicBrainzDatabaseClient) else "musicbrainz_api"
+            
             # Record the identification attempt details
             self._record_identification_attempt(
                 track_id=track.track_id,
-                source_used="musicbrainz",
+                source_used=client_type,
                 query_performed=f"title='{track.title}', artist='{track.artist_name}', release='{track.release_title}'",
                 result=json.dumps(credits) if credits else "No results found",
                 confidence_score=max([c.get('confidence_score', 0) for c in credits]) if credits else 0.0
@@ -343,10 +388,13 @@ class SongwriterIdentificationPipeline:
         except Exception as e:
             logger.error(f"Error in MusicBrainz identification: {e}")
             
+            # Determine client type for logging
+            client_type = "musicbrainz_db" if isinstance(self.mb_client, MusicBrainzDatabaseClient) else "musicbrainz_api"
+            
             # Record the failed attempt
             self._record_identification_attempt(
                 track_id=track.track_id,
-                source_used="musicbrainz",
+                source_used=client_type,
                 query_performed=f"title='{track.title}', artist='{track.artist_name}', release='{track.release_title}'",
                 result=f"Error: {e}",
                 confidence_score=0.0

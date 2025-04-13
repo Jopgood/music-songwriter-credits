@@ -11,6 +11,10 @@ aiohttp>=3.9.1
 musicbrainzngs>=0.7.1
 discogs-client>=2.3.0
 
+# Database client
+psycopg2-binary>=2.9.9  # PostgreSQL driver
+sqlalchemy-utils>=0.41.1  # SQLAlchemy utilities
+
 # Audio processing
 librosa>=0.10.1
 pyacoustid>=1.2.2
