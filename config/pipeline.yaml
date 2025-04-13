@@ -47,6 +47,8 @@ apis:
   musicbrainz:
     enabled: true
     user_agent: "SongwriterCreditsIdentifier/1.0"
+    version: "1.0"
+    contact: "contact@example.com"
     rate_limit: 1.0  # Requests per second
     retries: 3
   
@@ -80,6 +82,8 @@ tier1:
     - bmi
     - sesac
   confidence_threshold: 0.7
+  match_strategy: best  # 'best' or 'all' (best = highest confidence match, all = all matches above threshold)
+  max_results: 3  # Maximum number of results to process per source
 
 tier2:
   enabled: true

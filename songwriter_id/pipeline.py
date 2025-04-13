@@ -1,5 +1,6 @@
 """Main pipeline implementation for songwriter identification."""
 
+import json
 import logging
 import os
 import yaml
@@ -13,6 +14,7 @@ from songwriter_id.database.models import Track, SongwriterCredit, Identificatio
 from songwriter_id.data_ingestion.parser import CatalogParser
 from songwriter_id.data_ingestion.normalizer import TrackNormalizer
 from songwriter_id.data_ingestion.importer import CatalogImporter
+from songwriter_id.api import MusicBrainzClient, AcoustIDClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ class SongwriterIdentificationPipeline:
         self.engine = create_engine(db_connection)
         self.Session = sessionmaker(bind=self.engine)
         
-        # Initialize components
+        # Initialize data ingestion components
         self.parser = CatalogParser(
             field_mapping=self.config.get('field_mapping', None)
         )
@@ -46,6 +48,9 @@ class SongwriterIdentificationPipeline:
             db_connection=db_connection,
             normalizer=self.normalizer
         )
+        
+        # Initialize API clients
+        self._init_api_clients()
 
     def _load_config(self, config_file: str) -> Dict:
         """Load the configuration from a YAML file.
@@ -69,6 +74,32 @@ class SongwriterIdentificationPipeline:
         except Exception as e:
             logger.error(f"Error loading configuration: {e}")
             return {}
+    
+    def _init_api_clients(self):
+        """Initialize API clients based on configuration."""
+        # Initialize MusicBrainz client if enabled
+        self.mb_client = None
+        mb_config = self.config.get('apis', {}).get('musicbrainz', {})
+        if mb_config.get('enabled', False):
+            logger.info("Initializing MusicBrainz client")
+            self.mb_client = MusicBrainzClient(
+                app_name=mb_config.get('user_agent', 'SongwriterCreditsIdentifier'),
+                version=mb_config.get('version', '1.0'),
+                contact=mb_config.get('contact', 'contact@example.com'),
+                rate_limit=mb_config.get('rate_limit', 1.0),
+                retries=mb_config.get('retries', 3)
+            )
+        
+        # Initialize AcoustID client if enabled
+        self.acoustid_client = None
+        acoustid_config = self.config.get('apis', {}).get('acoustid', {})
+        if acoustid_config.get('enabled', False):
+            logger.info("Initializing AcoustID client")
+            api_key = acoustid_config.get('api_key', '')
+            if api_key:
+                self.acoustid_client = AcoustIDClient(api_key)
+            else:
+                logger.warning("AcoustID enabled but no API key provided")
 
     def process_catalog(self, catalog_path: str, audio_base_path: Optional[str] = None) -> Dict:
         """Process a catalog of tracks to identify songwriter credits.
@@ -142,41 +173,48 @@ class SongwriterIdentificationPipeline:
             
             for track in pending_tracks:
                 # Process through Tier 1
-                credits = self._tier1_metadata_identification(track)
-                if credits:
-                    track.identification_status = 'identified_tier1'
-                    track.confidence_score = self._evaluate_confidence(credits)
-                    for credit in credits:
-                        session.add(credit)
-                    tier1_identified += 1
-                    continue
+                tier1_config = self.config.get('tier1', {})
+                if tier1_config.get('enabled', True):
+                    credits = self._tier1_metadata_identification(track)
+                    if credits:
+                        track.identification_status = 'identified_tier1'
+                        track.confidence_score = self._evaluate_confidence(credits)
+                        for credit in credits:
+                            session.add(credit)
+                        tier1_identified += 1
+                        session.commit()
+                        continue
                 
                 # Process through Tier 2
-                credits = self._tier2_enhanced_matching(track)
-                if credits:
-                    track.identification_status = 'identified_tier2'
-                    track.confidence_score = self._evaluate_confidence(credits)
-                    for credit in credits:
-                        session.add(credit)
-                    tier2_identified += 1
-                    continue
+                tier2_config = self.config.get('tier2', {})
+                if tier2_config.get('enabled', True):
+                    credits = self._tier2_enhanced_matching(track)
+                    if credits:
+                        track.identification_status = 'identified_tier2'
+                        track.confidence_score = self._evaluate_confidence(credits)
+                        for credit in credits:
+                            session.add(credit)
+                        tier2_identified += 1
+                        session.commit()
+                        continue
                 
                 # Process through Tier 3
-                credits = self._tier3_audio_analysis(track)
-                if credits:
-                    track.identification_status = 'identified_tier3'
-                    track.confidence_score = self._evaluate_confidence(credits)
-                    for credit in credits:
-                        session.add(credit)
-                    tier3_identified += 1
-                    continue
+                tier3_config = self.config.get('tier3', {})
+                if tier3_config.get('enabled', True):
+                    credits = self._tier3_audio_analysis(track)
+                    if credits:
+                        track.identification_status = 'identified_tier3'
+                        track.confidence_score = self._evaluate_confidence(credits)
+                        for credit in credits:
+                            session.add(credit)
+                        tier3_identified += 1
+                        session.commit()
+                        continue
                 
                 # Track remains unidentified
                 track.identification_status = 'manual_review'
                 unidentified += 1
-            
-            # Commit changes
-            session.commit()
+                session.commit()
             
             stats = {
                 "tier1_identified": tier1_identified,
@@ -206,17 +244,102 @@ class SongwriterIdentificationPipeline:
             List of identified songwriter credits
         """
         logger.info(f"Tier 1: Processing track '{track.title}' by '{track.artist_name}'")
-        # TODO: Implement Tier 1 identification with MusicBrainz and other metadata sources
+        identified_credits = []
         
-        # Create a record of the identification attempt
+        # Get configured sources for Tier 1
+        tier1_sources = self.config.get('tier1', {}).get('sources', [])
+        tier1_confidence_threshold = self.config.get('tier1', {}).get('confidence_threshold', 0.7)
+        
+        # Try MusicBrainz if enabled
+        if 'musicbrainz' in tier1_sources and self.mb_client:
+            mb_credits = self._try_musicbrainz_identification(track)
+            
+            if mb_credits:
+                # Convert API credit format to SongwriterCredit objects
+                for credit in mb_credits:
+                    # Skip credits with low confidence
+                    if credit.get('confidence_score', 0) < tier1_confidence_threshold:
+                        continue
+                        
+                    songwriter_credit = SongwriterCredit(
+                        track_id=track.track_id,
+                        songwriter_name=credit['name'],
+                        role=credit['role'],
+                        publisher_name=credit.get('publisher_name'),
+                        source_of_info=f"musicbrainz:{credit.get('source_id', '')}",
+                        confidence_score=credit.get('confidence_score', 0.7)
+                    )
+                    identified_credits.append(songwriter_credit)
+        
+        # TODO: Add other PRO database integrations (ASCAP, BMI, SESAC)
+        # if 'ascap' in tier1_sources and self.ascap_client:
+        #    ascap_credits = self._try_ascap_identification(track)
+        #    ...
+        
+        # Record the identification attempt
+        result_text = "No results found"
+        if identified_credits:
+            result_text = f"Found {len(identified_credits)} credits"
+           
         self._record_identification_attempt(
             track_id=track.track_id,
             source_used="tier1_metadata",
             query_performed=f"title='{track.title}', artist='{track.artist_name}'",
-            result="No results found"
+            result=result_text,
+            confidence_score=self._evaluate_confidence(identified_credits)
         )
         
-        return []
+        return identified_credits
+    
+    def _try_musicbrainz_identification(self, track: Track) -> List[Dict]:
+        """Try to identify songwriter credits using MusicBrainz.
+        
+        Args:
+            track: Track object to process
+            
+        Returns:
+            List of credits in API format (dicts)
+        """
+        logger.info(f"Trying MusicBrainz identification for '{track.title}' by '{track.artist_name}'")
+        try:
+            # Get songwriter credits by title and artist
+            credits = self.mb_client.get_credits_by_title_artist(
+                title=track.title,
+                artist=track.artist_name,
+                release=track.release_title
+            )
+            
+            # Log results
+            if credits:
+                logger.info(f"MusicBrainz found {len(credits)} credits for '{track.title}' by '{track.artist_name}'")
+                for credit in credits:
+                    logger.debug(f"Credit: {credit['name']} ({credit['role']}), confidence: {credit.get('confidence_score', 0)}")
+            else:
+                logger.info(f"No MusicBrainz credits found for '{track.title}' by '{track.artist_name}'")
+            
+            # Record the identification attempt details
+            self._record_identification_attempt(
+                track_id=track.track_id,
+                source_used="musicbrainz",
+                query_performed=f"title='{track.title}', artist='{track.artist_name}', release='{track.release_title}'",
+                result=json.dumps(credits) if credits else "No results found",
+                confidence_score=max([c.get('confidence_score', 0) for c in credits]) if credits else 0.0
+            )
+            
+            return credits
+        except Exception as e:
+            logger.error(f"Error in MusicBrainz identification: {e}")
+            
+            # Record the failed attempt
+            self._record_identification_attempt(
+                track_id=track.track_id,
+                source_used="musicbrainz",
+                query_performed=f"title='{track.title}', artist='{track.artist_name}', release='{track.release_title}'",
+                result=f"Error: {e}",
+                confidence_score=0.0
+            )
+            
+            return []
 
     def _tier2_enhanced_matching(self, track: Track) -> List[SongwriterCredit]:
         """Tier 2: Identify songwriter credits using enhanced matching techniques.
@@ -261,7 +384,7 @@ class SongwriterIdentificationPipeline:
             logger.warning(f"Audio file not found: {track.audio_path}")
             return []
         
-        # TODO: Implement Tier 3 identification with audio fingerprinting
+        # TODO: Implement AcoustID integration for Tier 3
         
         # Create a record of the identification attempt
         self._record_identification_attempt(
