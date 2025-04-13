@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   app:
@@ -15,10 +16,11 @@ services:
       - ASCAP_API_KEY=${ASCAP_API_KEY:-}
       - BMI_API_KEY=${BMI_API_KEY:-}
     ports:
-      - "5001:5000"  # Changed from 5000:5000 to 5001:5000
+      - "5001:5000"
     networks:
       - songwriter-network
-    command: python -m songwriter_id.pipeline
+    command: python -m songwriter_id
+    restart: on-failure
 
   db:
     image: postgres:14-alpine
@@ -48,11 +50,13 @@ services:
       - DATABASE_URL=postgresql://songwriter:password@db:5432/songwriter_db
       - FLASK_APP=songwriter_id.review_interface
       - FLASK_ENV=development
+      - SECRET_KEY=dev_key_change_in_production
     ports:
-      - "8080:5000"  # Changed from 8000:5000 to 8080:5000
+      - "8080:5000"
     networks:
       - songwriter-network
-    command: python -m songwriter_id.review_interface
+    command: flask --app songwriter_id.review_interface run --host=0.0.0.0
+    restart: on-failure
 
 networks:
   songwriter-network:
