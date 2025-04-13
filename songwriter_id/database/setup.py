@@ -2,7 +2,7 @@
 
 import logging
 import os
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from songwriter_id.database.models import Base, Track
@@ -72,16 +72,31 @@ def get_stats(session):
         return {}
     
     try:
+        # Total tracks
         total_tracks = session.query(Track).count()
+        
+        # Tracks by identification status
         pending_tracks = session.query(Track).filter_by(identification_status='pending').count()
-        identified_tracks = session.query(Track).filter_by(identification_status='identified').count()
+        tier1_tracks = session.query(Track).filter_by(identification_status='identified_tier1').count()
+        tier2_tracks = session.query(Track).filter_by(identification_status='identified_tier2').count()
+        tier3_tracks = session.query(Track).filter_by(identification_status='identified_tier3').count()
         manual_review_tracks = session.query(Track).filter_by(identification_status='manual_review').count()
+        
+        # Count songwriter credits
+        credits_count = session.execute(text("SELECT COUNT(*) FROM songwriter_credits")).scalar_one_or_none() or 0
+        
+        # Count identification attempts
+        attempts_count = session.execute(text("SELECT COUNT(*) FROM identification_attempts")).scalar_one_or_none() or 0
         
         return {
             'total_tracks': total_tracks,
             'pending_tracks': pending_tracks,
-            'identified_tracks': identified_tracks,
-            'manual_review_tracks': manual_review_tracks
+            'identified_tier1': tier1_tracks,
+            'identified_tier2': tier2_tracks,
+            'identified_tier3': tier3_tracks,
+            'manual_review': manual_review_tracks,
+            'songwriter_credits': credits_count,
+            'identification_attempts': attempts_count
         }
     except Exception as e:
         logger.error(f"Error getting database stats: {e}")
