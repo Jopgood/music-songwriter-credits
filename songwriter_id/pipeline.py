@@ -14,7 +14,16 @@ from songwriter_id.database.models import Track, SongwriterCredit, Identificatio
 from songwriter_id.data_ingestion.parser import CatalogParser
 from songwriter_id.data_ingestion.normalizer import TrackNormalizer
 from songwriter_id.data_ingestion.importer import CatalogImporter
-from songwriter_id.api import MusicBrainzClient, AcoustIDClient
+
+# Make acoustid optional
+try:
+    from songwriter_id.api import MusicBrainzClient, AcoustIDClient
+    ACOUSTID_AVAILABLE = True
+except ImportError:
+    # If acoustid/chromaprint is not available, just import MusicBrainzClient
+    from songwriter_id.api.musicbrainz import MusicBrainzClient
+    ACOUSTID_AVAILABLE = False
+    logging.warning("AcoustID/Chromaprint not available. Tier 3 audio fingerprinting will be disabled.")
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +99,18 @@ class SongwriterIdentificationPipeline:
                 retries=mb_config.get('retries', 3)
             )
         
-        # Initialize AcoustID client if enabled
+        # Initialize AcoustID client if enabled and available
         self.acoustid_client = None
         acoustid_config = self.config.get('apis', {}).get('acoustid', {})
-        if acoustid_config.get('enabled', False):
+        if ACOUSTID_AVAILABLE and acoustid_config.get('enabled', False):
             logger.info("Initializing AcoustID client")
             api_key = acoustid_config.get('api_key', '')
             if api_key:
-                self.acoustid_client = AcoustIDClient(api_key)
+                try:
+                    from songwriter_id.api import AcoustIDClient
+                    self.acoustid_client = AcoustIDClient(api_key)
+                except ImportError:
+                    logger.warning("AcoustID client initialization failed - library not available")
             else:
                 logger.warning("AcoustID enabled but no API key provided")
 
@@ -200,7 +213,7 @@ class SongwriterIdentificationPipeline:
                 
                 # Process through Tier 3
                 tier3_config = self.config.get('tier3', {})
-                if tier3_config.get('enabled', True):
+                if ACOUSTID_AVAILABLE and tier3_config.get('enabled', True):
                     credits = self._tier3_audio_analysis(track)
                     if credits:
                         track.identification_status = 'identified_tier3'
@@ -280,7 +293,7 @@ class SongwriterIdentificationPipeline:
         result_text = "No results found"
         if identified_credits:
             result_text = f"Found {len(identified_credits)} credits"
-           
+            
         self._record_identification_attempt(
             track_id=track.track_id,
             source_used="tier1_metadata",
@@ -373,6 +386,11 @@ class SongwriterIdentificationPipeline:
             List of identified songwriter credits
         """
         logger.info(f"Tier 3: Processing track '{track.title}' by '{track.artist_name}'")
+        
+        # Skip if AcoustID is not available
+        if not ACOUSTID_AVAILABLE:
+            logger.warning("AcoustID is not available - skipping Tier 3 processing")
+            return []
         
         # Skip if no audio path is available
         if not track.audio_path:
