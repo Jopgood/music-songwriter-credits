@@ -1,112 +1,103 @@
 #!/usr/bin/env python3
-"""
-Script to import a catalog CSV file into the database.
-"""
+"""Script to import a music catalog and process it using the identification pipeline."""
 
+import argparse
+import logging
 import os
 import sys
-import csv
-import logging
-import argparse
-from dotenv import load_dotenv
+from pathlib import Path
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Add the parent directory to the path so we can import the module
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Add the project root to the path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from songwriter_id.pipeline import SongwriterIdentificationPipeline
 
-# Import package modules
-from songwriter_id.database.setup import setup_database, create_session
-from songwriter_id.database.models import Track
 
-def import_catalog(catalog_path, db_url=None):
-    """Import a catalog CSV file into the database.
+def setup_logging(log_level_name):
+    """Set up logging with the specified level.
     
     Args:
-        catalog_path: Path to the CSV file
-        db_url: Database URL (optional, uses env var if not provided)
-        
-    Returns:
-        Number of tracks imported
+        log_level_name: Name of the log level (DEBUG, INFO, WARNING, ERROR)
     """
-    # Set up database
-    engine = setup_database(db_url)
-    if not engine:
-        logger.error("Failed to set up database.")
-        return 0
-    
-    # Create session
-    Session = create_session(engine)
-    if not Session:
-        logger.error("Failed to create database session.")
-        return 0
-    
-    session = Session()
-    
-    try:
-        logger.info(f"Importing catalog from {catalog_path}")
-        with open(catalog_path, 'r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            
-            track_count = 0
-            for row in reader:
-                # Check if track already exists
-                existing = session.query(Track).filter_by(
-                    title=row.get('title', ''),
-                    artist_name=row.get('artist', '')
-                ).first()
-                
-                if existing:
-                    logger.info(f"Track '{row.get('title')}' by {row.get('artist')} already exists, skipping.")
-                    continue
-                
-                track = Track(
-                    title=row.get('title', ''),
-                    artist_name=row.get('artist', ''),
-                    release_title=row.get('release', ''),
-                    duration=row.get('duration', ''),  # Store as string, no conversion needed
-                    audio_path=row.get('audio_path', ''),
-                    identification_status='pending',
-                    confidence_score=0.0
-                )
-                session.add(track)
-                track_count += 1
-                
-                # Commit in batches to avoid memory issues
-                if track_count % 100 == 0:
-                    session.commit()
-                    logger.info(f"Imported {track_count} tracks...")
-            
-            session.commit()
-            logger.info(f"Successfully imported {track_count} tracks")
-            return track_count
-    
-    except Exception as e:
-        session.rollback()
-        logger.error(f"Error importing catalog: {e}")
-        return 0
-    finally:
-        session.close()
+    log_level = getattr(logging, log_level_name)
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler('catalog_import.log')
+        ]
+    )
+
 
 def main():
-    """Main entry point for the script."""
-    parser = argparse.ArgumentParser(description='Import a catalog CSV file into the database')
-    parser.add_argument('--catalog', required=True, help='Path to catalog CSV file')
-    parser.add_argument('--db-url', help='Database URL (overrides environment variable)')
+    """Main function for the script."""
+    parser = argparse.ArgumentParser(description='Import and process a music catalog')
+    
+    parser.add_argument('catalog_path', help='Path to the catalog file (CSV or Excel)')
+    parser.add_argument('--config', default='config/pipeline.yaml', 
+                        help='Path to the configuration file')
+    parser.add_argument('--db', default='postgresql://localhost/songwriter_db', 
+                        help='Database connection string')
+    parser.add_argument('--audio-path', help='Base path for audio files')
+    parser.add_argument('--log-level', default='INFO', 
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+                        help='Logging level')
+    
     args = parser.parse_args()
     
-    # Load environment variables
-    load_dotenv()
+    # Set up logging
+    setup_logging(args.log_level)
+    logger = logging.getLogger(__name__)
     
-    # Import catalog
-    count = import_catalog(args.catalog, args.db_url)
+    # Validate inputs
+    catalog_path = Path(args.catalog_path)
+    if not catalog_path.exists():
+        logger.error(f"Catalog file not found: {args.catalog_path}")
+        sys.exit(1)
     
-    return 0 if count > 0 else 1
+    config_path = Path(args.config)
+    if not config_path.exists():
+        logger.warning(f"Configuration file not found: {args.config}. Using default settings.")
+    
+    # Initialize the pipeline
+    try:
+        logger.info("Initializing songwriter identification pipeline")
+        pipeline = SongwriterIdentificationPipeline(
+            config_file=str(config_path),
+            db_connection=args.db
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize pipeline: {e}")
+        sys.exit(1)
+    
+    # Process the catalog
+    try:
+        logger.info(f"Processing catalog: {args.catalog_path}")
+        stats = pipeline.process_catalog(
+            catalog_path=str(catalog_path),
+            audio_base_path=args.audio_path
+        )
+        
+        logger.info("Catalog processing complete")
+        print("\nProcessing Results:")
+        print(f"Tracks parsed: {stats['import']['tracks_parsed']}")
+        print(f"Tracks added to database: {stats['import']['tracks_added']}")
+        print(f"Tracks skipped: {stats['import']['tracks_skipped']}")
+        print(f"Import errors: {stats['import']['import_errors']}")
+        
+        if 'identification' in stats and isinstance(stats['identification'], dict):
+            print("\nIdentification Results:")
+            print(f"Tracks identified via Tier 1 (metadata): {stats['identification'].get('tier1_identified', 0)}")
+            print(f"Tracks identified via Tier 2 (enhanced): {stats['identification'].get('tier2_identified', 0)}")
+            print(f"Tracks identified via Tier 3 (audio): {stats['identification'].get('tier3_identified', 0)}")
+            print(f"Tracks requiring manual review: {stats['identification'].get('manual_review', 0)}")
+            print(f"Total tracks processed: {stats['identification'].get('total_processed', 0)}")
+        
+    except Exception as e:
+        logger.error(f"Error processing catalog: {e}")
+        sys.exit(1)
 
-if __name__ == "__main__":
-    sys.exit(main())
+
+if __name__ == '__main__':
+    main()
