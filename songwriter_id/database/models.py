@@ -17,15 +17,17 @@ class Track(Base):
     title = Column(String(255), nullable=False, index=True)
     artist_name = Column(String(255), nullable=False, index=True)
     release_title = Column(String(255), nullable=True)
-    duration = Column(Float, nullable=True)
+    duration = Column(String, nullable=True)
     audio_path = Column(String(512), nullable=True)
     identification_status = Column(String(50), default="pending")
     confidence_score = Column(Float, default=0.0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
 
-    songwriter_credits = relationship("SongwriterCredit", back_populates="track")
-    identification_attempts = relationship("IdentificationAttempt", back_populates="track")
+    songwriter_credits = relationship(
+        "SongwriterCredit", back_populates="track")
+    identification_attempts = relationship(
+        "IdentificationAttempt", back_populates="track")
 
     def __repr__(self):
         return f"<Track {self.track_id}: {self.title} by {self.artist_name}>"
