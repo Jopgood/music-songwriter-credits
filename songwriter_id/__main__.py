@@ -5,9 +5,6 @@ import sys
 import logging
 import argparse
 from dotenv import load_dotenv
-import yaml
-
-from songwriter_id.pipeline import SongwriterIdentificationPipeline
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +16,39 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Try to import yaml, but provide a fallback
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    logger.warning("PyYAML not installed, will use default configuration")
+    HAS_YAML = False
+
+# Import after configure logging
+from songwriter_id.database.setup import setup_database, create_session
+from songwriter_id.pipeline import SongwriterIdentificationPipeline
+
+def load_config(config_path):
+    """Load configuration from YAML file.
+    
+    Args:
+        config_path: Path to config file
+        
+    Returns:
+        Configuration dictionary
+    """
+    if not HAS_YAML:
+        logger.warning("PyYAML not installed, using default configuration")
+        return {}
+        
+    try:
+        with open(config_path, 'r') as config_file:
+            config = yaml.safe_load(config_file)
+            logger.info(f"Loaded configuration with {len(config.keys()) if config else 0} sections")
+            return config
+    except Exception as e:
+        logger.warning(f"Failed to load config file {config_path}: {e}")
+        return {}
 
 def main():
     """Main entry point for the application."""
@@ -39,16 +69,16 @@ def main():
         return 1
     
     try:
-        logger.info(f"Starting Songwriter Identification System using config: {args.config}")
+        logger.info(f"Starting Songwriter Identification System")
         
-        # Load config (just to check it exists)
-        try:
-            with open(args.config, 'r') as config_file:
-                config = yaml.safe_load(config_file)
-                logger.info(f"Loaded configuration with {len(config.keys())} sections")
-        except Exception as e:
-            logger.warning(f"Failed to load config file {args.config}: {e}")
-            logger.warning("Continuing with default configuration")
+        # Set up database
+        engine = setup_database(db_url)
+        if not engine:
+            logger.error("Failed to set up database.")
+            return 1
+            
+        # Load configuration
+        config = load_config(args.config)
         
         # Initialize pipeline
         pipeline = SongwriterIdentificationPipeline(
