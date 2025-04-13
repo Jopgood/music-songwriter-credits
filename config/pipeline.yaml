@@ -62,7 +62,7 @@ apis:
     database:
       enabled: true
       # Connection string for the MusicBrainz database
-      connection_string: "postgresql://musicbrainz:musicbrainz@localhost:5432/musicbrainz"
+      connection_string: "postgresql://musicbrainz:musicbrainz@localhost:5434/musicbrainz_db"
       # Connection pool settings
       pool_size: 10
       max_overflow: 20
