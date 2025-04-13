@@ -8,7 +8,8 @@ services:
       - .:/app
       - audio_data:/audio_data
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://songwriter:password@db:5432/songwriter_db
       - MUSICBRAINZ_API_KEY=${MUSICBRAINZ_API_KEY:-}
@@ -19,7 +20,8 @@ services:
       - "5001:5000"
     networks:
       - songwriter-network
-    command: python -m songwriter_id
+    # Simple command to keep container running without errors while in development
+    command: bash -c "python -m songwriter_id || (echo 'App failed to start, staying alive for debugging' && tail -f /dev/null)"
     restart: on-failure
 
   db:
@@ -36,6 +38,11 @@ services:
     networks:
       - songwriter-network
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U songwriter"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   review-ui:
     build:
@@ -45,7 +52,8 @@ services:
     volumes:
       - .:/app
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://songwriter:password@db:5432/songwriter_db
       - FLASK_APP=songwriter_id.review_interface
