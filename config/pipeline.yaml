@@ -46,11 +46,26 @@ confidence_thresholds:
 apis:
   musicbrainz:
     enabled: true
-    user_agent: "SongwriterCreditsIdentifier/1.0"
-    version: "1.0"
-    contact: "contact@example.com"
-    rate_limit: 1.0  # Requests per second
-    retries: 3
+    # Choose the client type: "api" or "database"
+    client_type: "database"
+    
+    # API client settings (used if client_type is "api")
+    api:
+      enabled: true
+      user_agent: "SongwriterCreditsIdentifier/1.0"
+      version: "1.0"
+      contact: "contact@example.com"
+      rate_limit: 1.0  # Requests per second
+      retries: 3
+    
+    # Database client settings (used if client_type is "database")
+    database:
+      enabled: true
+      # Connection string for the MusicBrainz database
+      connection_string: "postgresql://musicbrainz:musicbrainz@localhost:5432/musicbrainz"
+      # Connection pool settings
+      pool_size: 10
+      max_overflow: 20
   
   acoustid:
     enabled: true
