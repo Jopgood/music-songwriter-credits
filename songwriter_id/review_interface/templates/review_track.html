@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Track - {{ track.title }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">Songwriter Credits System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracks">All Tracks</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracks?status=manual_review">Manual Review</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="mb-4">
+            <a href="/tracks/{{ track.track_id }}" class="btn btn-outline-secondary mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+                </svg>
+                Back to Track Details
+            </a>
+            <h1>Review: {{ track.title }}</h1>
+            <h3>by {{ track.artist_name }}</h3>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Edit Songwriter Credits</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" id="creditForm">
+                            <div id="songwriterFields">
+                                {% if credits %}
+                                    {% for credit in credits %}
+                                    <div class="songwriter-entry card mb-3">
+                                        <div class="card-body">
+                                            <div class="row mb-3">
+                                                <label class="col-sm-3 col-form-label">Songwriter Name</label>
+                                                <div class="col-sm-9">
+                                                    <input type="text" class="form-control" name="songwriter_name_{{ loop.index0 }}" value="{{ credit.songwriter_name }}" required>
+                                                </div>
+                                            </div>
+                                            <div class="row mb-3">
+                                                <label class="col-sm-3 col-form-label">Role</label>
+                                                <div class="col-sm-9">
+                                                    <select class="form-select" name="role_{{ loop.index0 }}">
+                                                        <option value="composer" {% if credit.role == 'composer' %}selected{% endif %}>Composer</option>
+                                                        <option value="lyricist" {% if credit.role == 'lyricist' %}selected{% endif %}>Lyricist</option>
+                                                        <option value="writer" {% if credit.role == 'writer' %}selected{% endif %}>Writer</option>
+                                                        <option value="arranger" {% if credit.role == 'arranger' %}selected{% endif %}>Arranger</option>
+                                                        <option value="producer" {% if credit.role == 'producer' %}selected{% endif %}>Producer</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="row mb-3">
+                                                <label class="col-sm-3 col-form-label">Share Percentage</label>
+                                                <div class="col-sm-9">
+                                                    <input type="number" class="form-control" name="share_percentage_{{ loop.index0 }}" value="{{ credit.share_percentage|round(2) if credit.share_percentage else '' }}" min="0" max="100" step="0.01">
+                                                </div>
+                                            </div>
+                                            <div class="row mb-3">
+                                                <label class="col-sm-3 col-form-label">Publisher</label>
+                                                <div class="col-sm-9">
+                                                    <input type="text" class="form-control" name="publisher_name_{{ loop.index0 }}" value="{{ credit.publisher_name or '' }}">
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-danger remove-songwriter">Remove</button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                <div class="songwriter-entry card mb-3">
+                                    <div class="card-body">
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">Songwriter Name</label>
+                                            <div class="col-sm-9">
+                                                <input type="text" class="form-control" name="songwriter_name_0" required>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">Role</label>
+                                            <div class="col-sm-9">
+                                                <select class="form-select" name="role_0">
+                                                    <option value="composer">Composer</option>
+                                                    <option value="lyricist">Lyricist</option>
+                                                    <option value="writer" selected>Writer</option>
+                                                    <option value="arranger">Arranger</option>
+                                                    <option value="producer">Producer</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">Share Percentage</label>
+                                            <div class="col-sm-9">
+                                                <input type="number" class="form-control" name="share_percentage_0" value="100" min="0" max="100" step="0.01">
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">Publisher</label>
+                                            <div class="col-sm-9">
+                                                <input type="text" class="form-control" name="publisher_name_0">
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-danger remove-songwriter">Remove</button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <input type="hidden" id="songwriter_count" name="songwriter_count" value="{{ credits|length if credits else 1 }}">
+                            
+                            <button type="button" id="addSongwriter" class="btn btn-success mb-3">Add Songwriter</button>
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary btn-lg">Save Changes</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Track Info</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Title:</strong> {{ track.title }}</p>
+                        <p><strong>Artist:</strong> {{ track.artist_name }}</p>
+                        <p><strong>Release:</strong> {{ track.release_title or 'Unknown' }}</p>
+                        <p><strong>Duration:</strong> {{ track.duration|round(2) }} seconds</p>
+                        <p><strong>Current Status:</strong> 
+                            {% if track.identification_status == 'identified' %}
+                            <span class="badge bg-success">Identified</span>
+                            {% elif track.identification_status == 'manual_review' %}
+                            <span class="badge bg-danger">Manual Review</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Pending</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                
+                {% if attempts %}
+                <div class="card mb-4">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">Identification Attempts</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group">
+                            {% for attempt in attempts %}
+                            <div class="list-group-item">
+                                <h6>{{ attempt.source_used }}</h6>
+                                <small class="text-muted">{{ attempt.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <p class="mb-1 mt-1"><small>{{ attempt.query_performed }}</small></p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const songwriterFields = document.getElementById('songwriterFields');
+            const addSongwriterBtn = document.getElementById('addSongwriter');
+            const songwriterCountInput = document.getElementById('songwriter_count');
+            
+            // Function to get current count
+            function getCurrentCount() {
+                return parseInt(songwriterCountInput.value);
+            }
+            
+            // Function to update the count
+            function updateCount() {
+                songwriterCountInput.value = document.querySelectorAll('.songwriter-entry').length;
+            }
+            
+            // Add a new songwriter form
+            addSongwriterBtn.addEventListener('click', function() {
+                const count = getCurrentCount();
+                const newEntry = document.createElement('div');
+                newEntry.className = 'songwriter-entry card mb-3';
+                newEntry.innerHTML = `
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label">Songwriter Name</label>
+                            <div class="col-sm-9">
+                                <input type="text" class="form-control" name="songwriter_name_${count}" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label">Role</label>
+                            <div class="col-sm-9">
+                                <select class="form-select" name="role_${count}">
+                                    <option value="composer">Composer</option>
+                                    <option value="lyricist">Lyricist</option>
+                                    <option value="writer" selected>Writer</option>
+                                    <option value="arranger">Arranger</option>
+                                    <option value="producer">Producer</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label">Share Percentage</label>
+                            <div class="col-sm-9">
+                                <input type="number" class="form-control" name="share_percentage_${count}" value="0" min="0" max="100" step="0.01">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-sm-3 col-form-label">Publisher</label>
+                            <div class="col-sm-9">
+                                <input type="text" class="form-control" name="publisher_name_${count}">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-danger remove-songwriter">Remove</button>
+                    </div>
+                `;
+                songwriterFields.appendChild(newEntry);
+                songwriterCountInput.value = count + 1;
+            });
+            
+            // Remove a songwriter form
+            songwriterFields.addEventListener('click', function(e) {
+                if (e.target.classList.contains('remove-songwriter')) {
+                    // Don't remove if it's the last one
+                    if (document.querySelectorAll('.songwriter-entry').length > 1) {
+                        e.target.closest('.songwriter-entry').remove();
+                        updateCount();
+                    } else {
+                        alert('At least one songwriter must be specified.');
+                    }
+                }
+            });
+        });
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
