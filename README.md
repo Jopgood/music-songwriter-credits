@@ -8,7 +8,7 @@ This system aims to streamline the process of identifying songwriter credits by 
 
 1. **Tier 1: Metadata-Based Identification (50-70% resolution)**
    - Utilize existing track titles and artist information
-   - Query established music databases like MusicBrainz
+   - Query established music databases like MusicBrainz (API or direct database access)
    - Match against PRO databases (ASCAP, BMI, SESAC, etc.)
 
 2. **Tier 2: Enhanced Matching (15-25% additional resolution)**
@@ -83,9 +83,30 @@ The system follows a modular pipeline architecture that processes tracks sequent
    python scripts/setup_database.py
    ```
 
-5. Configure API keys:
+5. Configure API keys and database connections:
    - Copy `.env.example` to `.env`
    - Fill in your API keys for MusicBrainz, AcoustID, and PRO databases
+   - Update configuration in `config/pipeline.yaml`
+
+### MusicBrainz Database Integration
+
+The system now supports direct connection to a MusicBrainz database, which significantly improves query speed and removes API rate limits. To use this feature:
+
+1. Configure the MusicBrainz database connection in `config/pipeline.yaml`:
+   ```yaml
+   apis:
+     musicbrainz:
+       enabled: true
+       client_type: "database"
+       database:
+         connection_string: "postgresql://musicbrainz:musicbrainz@localhost:5432/musicbrainz"
+         pool_size: 10
+         max_overflow: 20
+   ```
+
+2. Make sure the MusicBrainz database is accessible (e.g., running in Docker)
+
+See the [MusicBrainz Database Integration](docs/musicbrainz_db_integration.md) documentation for more details.
 
 ### Running with Docker
 
@@ -172,12 +193,16 @@ music-songwriter-credits/
 │   └── pipeline.yaml           # Pipeline configuration
 ├── data/                       # Sample data and database migrations
 ├── docs/                       # Documentation and diagrams
+│   └── musicbrainz_db_integration.md  # MusicBrainz DB integration docs
 ├── notebooks/                  # Jupyter notebooks for exploration
 ├── scripts/                    # Utility scripts
 │   └── import_catalog.py       # Catalog import script
 ├── songwriter_id/              # Main package
 │   ├── __init__.py
 │   ├── api/                    # API integration modules
+│   │   ├── musicbrainz.py      # MusicBrainz API client
+│   │   ├── musicbrainz_db.py   # MusicBrainz database client
+│   │   └── acoustid.py         # AcoustID client 
 │   ├── audio/                  # Audio processing modules
 │   ├── data_ingestion/         # Data ingestion components
 │   │   ├── __init__.py
@@ -201,11 +226,22 @@ music-songwriter-credits/
 
 The system integrates with the following external services:
 
-- **MusicBrainz**: Open-source music metadata database
+- **MusicBrainz**: 
+  - API client for the open-source music metadata database
+  - Direct database connection for faster queries (new feature)
 - **AcoustID**: Open-source audio fingerprinting
 - **PRO Databases**: ASCAP, BMI, SESAC, PRS, SOCAN, SACEM, GEMA
 - **Music Publishing Databases**: Music Reports, Songtrust, ICE Services
 - **Secondary Sources**: Discogs, AllMusic, Spotify, Apple Music
+
+## Performance Improvements
+
+The MusicBrainz database integration significantly improves identification performance:
+
+- **No rate limiting**: Not limited by MusicBrainz API's 1 request per second
+- **Reduced latency**: Local database connections eliminate network overhead
+- **Complex queries**: Direct SQL allows more sophisticated querying than the API
+- **Connection pooling**: Efficient database connections for batch processing
 
 ## Contributing
 
