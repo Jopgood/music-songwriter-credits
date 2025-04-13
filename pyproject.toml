@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "songwriter_id"
+version = "0.1.0"
+description = "Automated system to identify songwriter credits for a music catalog"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Jopgood"}
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Jopgood/music-songwriter-credits"
+"Bug Tracker" = "https://github.com/Jopgood/music-songwriter-credits/issues"
+
+[tool.setuptools]
+packages = ["songwriter_id"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
