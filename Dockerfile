@@ -23,15 +23,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . .
 
+# Make scripts executable (do this before switching to non-root user)
+RUN chmod +x scripts/*.py
+
 # Install the package in development mode
 RUN pip install -e .
 
 # Create a user to run the application for better security
 RUN adduser --disabled-password --gecos '' appuser
 USER appuser
-
-# Make scripts executable
-RUN chmod +x scripts/*.py
 
 # Default command - this will be overridden by docker-compose
 CMD ["python", "-m", "songwriter_id"]
