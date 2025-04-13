@@ -15,7 +15,7 @@ services:
       - ASCAP_API_KEY=${ASCAP_API_KEY:-}
       - BMI_API_KEY=${BMI_API_KEY:-}
     ports:
-      - "5000:5000"
+      - "5001:5000"  # Changed from 5000:5000 to 5001:5000
     networks:
       - songwriter-network
     command: python -m songwriter_id.pipeline
@@ -49,7 +49,7 @@ services:
       - FLASK_APP=songwriter_id.review_interface
       - FLASK_ENV=development
     ports:
-      - "8000:5000"
+      - "8080:5000"  # Changed from 8000:5000 to 8080:5000
     networks:
       - songwriter-network
     command: python -m songwriter_id.review_interface
