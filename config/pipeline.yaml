@@ -1,78 +1,97 @@
-# Songwriter Identification Pipeline Configuration
+# Pipeline Configuration
 
 # General settings
-general:
-  batch_size: 100
-  log_level: INFO
-  confidence_threshold: 0.85
-  manual_review_threshold: 0.65
+batch_size: 100
+log_level: INFO
 
-# External API configurations
+# Field mapping for catalog import
+field_mapping:
+  # Standard fields
+  title: title
+  track_title: title
+  track name: title
+  name: title
+  
+  artist: artist_name
+  artist_name: artist_name
+  artist name: artist_name
+  performer: artist_name
+  
+  album: release_title
+  release: release_title
+  release_title: release_title
+  release title: release_title
+  album_title: release_title
+  album title: release_title
+  
+  duration: duration
+  length: duration
+  time: duration
+  
+  file: audio_path
+  path: audio_path
+  audio: audio_path
+  audio_path: audio_path
+  audio path: audio_path
+  file_path: audio_path
+  file path: audio_path
+
+# Confidence score thresholds
+confidence_thresholds:
+  high: 0.75  # Accept results with confidence >= 0.75
+  medium: 0.4  # Accept with warning 0.4 <= confidence < 0.75
+  low: 0.0    # Send for manual review confidence < 0.4
+
+# API configuration
 apis:
   musicbrainz:
-    app_name: "SongwriterID"
-    version: "0.1.0"
-    contact: "admin@example.com"
-    rate_limit_delay: 1.5  # seconds between requests to avoid rate limiting
-
+    enabled: true
+    user_agent: "SongwriterCreditsIdentifier/1.0"
+    rate_limit: 1.0  # Requests per second
+    retries: 3
+  
   acoustid:
-    # API key should be set in .env file as ACOUSTID_API_KEY
-    rate_limit_delay: 1.0  # seconds between requests to avoid rate limiting
-
+    enabled: true
+    api_key: "YOUR_ACOUSTID_API_KEY"  # Replace with actual key
+    rate_limit: 3.0  # Requests per second
+    retries: 3
+  
   ascap:
-    # API key should be set in .env file as ASCAP_API_KEY
-    rate_limit_delay: 1.0  # seconds between requests 
-
+    enabled: false
+    api_key: ""
+    rate_limit: 1.0
+  
   bmi:
-    # API key should be set in .env file as BMI_API_KEY
-    rate_limit_delay: 1.0  # seconds between requests
+    enabled: false
+    api_key: ""
+    rate_limit: 1.0
+  
+  sesac:
+    enabled: false
+    api_key: ""
+    rate_limit: 1.0
 
-# Database configuration
-database:
-  # Connection string should be set in .env file as DATABASE_URL
-  # or provided directly to the pipeline
-  pool_size: 5
-  max_overflow: 10
-  echo: false  # Set to true for SQL query logging
+# Tier-specific settings
+tier1:
+  enabled: true
+  sources:
+    - musicbrainz
+    - ascap
+    - bmi
+    - sesac
+  confidence_threshold: 0.7
 
-# Tiered identification settings
-tiers:
-  tier1:
-    enabled: true
-    sources:
-      - musicbrainz
-      - ascap
-      - bmi
-    min_confidence: 0.8
+tier2:
+  enabled: true
+  fuzzy_match_threshold: 0.85
+  entity_resolution_threshold: 0.75
+  sources:
+    - musicbrainz_fuzzy
+    - ml_prediction
+  confidence_threshold: 0.5
 
-  tier2:
-    enabled: true
-    sources:
-      - entity_resolution
-      - songwriter_prediction
-    min_confidence: 0.7
-    ml_models:
-      entity_resolution_model: "models/entity_resolution.joblib"
-      songwriter_prediction_model: "models/songwriter_prediction.joblib"
-
-  tier3:
-    enabled: true
-    sources:
-      - acoustid
-      - audio_fingerprinting
-    min_confidence: 0.6
-    audio:
-      sample_rate: 22050
-      feature_extraction:
-        mfcc_coefficients: 13
-        chroma_normalize: true
-
-  tier4:
-    enabled: true
-    manual_review_interface: true
-
-# File paths configuration
-paths:
-  audio_base_path: "/path/to/audio/files"  # Base path for audio files
-  ml_models_path: "models"  # Path to save/load ML models
-  log_file: "logs/pipeline.log"  # Log file path
+tier3:
+  enabled: true
+  sources:
+    - acoustid
+  confidence_threshold: 0.6
