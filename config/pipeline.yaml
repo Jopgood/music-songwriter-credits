@@ -62,7 +62,8 @@ apis:
     database:
       enabled: true
       # Connection string for the MusicBrainz database
-      connection_string: "postgresql://musicbrainz:musicbrainz@localhost:5434/musicbrainz_db"
+      # Use host.docker.internal instead of localhost to access the host machine from Docker
+      connection_string: "postgresql://musicbrainz:musicbrainz@host.docker.internal:5434/musicbrainz_db"
       # Connection pool settings
       pool_size: 10
       max_overflow: 20
