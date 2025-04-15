@@ -39,7 +39,7 @@ services:
       - songwriter-network
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U songwriter"]
+      test: ["CMD-SHELL", "pg_isready -U songwriter -d songwriter_db"]
       interval: 5s
       timeout: 5s
       retries: 5
