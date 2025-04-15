@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Songwriter Credits - Job Status</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        .status-pending {
+            color: #ffc107;
+        }
+        .status-processing {
+            color: #0dcaf0;
+        }
+        .status-completed {
+            color: #198754;
+        }
+        .status-failed {
+            color: #dc3545;
+        }
+        .progress {
+            height: 25px;
+        }
+        .stat-card {
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">Songwriter Credits System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracks">All Tracks</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracks?status=manual_review">Manual Review</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pipeline">Pipeline</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Pipeline Job Status</h1>
+            <a href="/pipeline" class="btn btn-outline-primary">Back to Pipeline</a>
+        </div>
+        
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h2 class="mb-0">Job Information</h2>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Job ID:</strong> {{ job.job_id }}</p>
+                        <p><strong>Catalog File:</strong> {{ job.catalog_file }}</p>
+                        <p><strong>Created:</strong> {{ job.created_at }}</p>
+                        {% if job.updated_at %}
+                        <p><strong>Last Updated:</strong> {{ job.updated_at }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Status:</strong> 
+                            {% if job.status == 'pending' %}
+                            <span class="status-pending">Pending</span>
+                            {% elif job.status == 'processing' %}
+                            <span class="status-processing">Processing</span>
+                            {% elif job.status == 'completed' %}
+                            <span class="status-completed">Completed</span>
+                            {% elif job.status == 'failed' %}
+                            <span class="status-failed">Failed</span>
+                            {% endif %}
+                        </p>
+                        {% if job.audio_base_path %}
+                        <p><strong>Audio Base Path:</strong> {{ job.audio_base_path }}</p>
+                        {% endif %}
+                        {% if job.status == 'failed' and job.stats and job.stats.error %}
+                        <div class="alert alert-danger">
+                            <strong>Error:</strong> {{ job.stats.error }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h3>Progress</h3>
+                    {% if job.status == 'pending' %}
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped bg-warning" role="progressbar" style="width: 5%" aria-valuenow="5" aria-valuemin="0" aria-valuemax="100">Pending</div>
+                    </div>
+                    {% elif job.status == 'processing' %}
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 50%" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100">Processing</div>
+                    </div>
+                    {% elif job.status == 'completed' %}
+                    <div class="progress">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Completed</div>
+                    </div>
+                    {% elif job.status == 'failed' %}
+                    <div class="progress">
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100">Failed</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        {% if job.status == 'completed' and job.stats %}
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h2 class="mb-0">Processing Results</h2>
+            </div>
+            <div class="card-body">
+                {% if job.stats.import %}
+                <div class="row mb-4">
+                    <h3>Import Statistics</h3>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-primary text-white">
+                            <h5>Tracks Parsed</h5>
+                            <h3>{{ job.stats.import.tracks_parsed }}</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-success text-white">
+                            <h5>Tracks Added</h5>
+                            <h3>{{ job.stats.import.tracks_added }}</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-info text-white">
+                            <h5>Tracks Skipped</h5>
+                            <h3>{{ job.stats.import.tracks_skipped }}</h3>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card bg-warning text-dark">
+                            <h5>Import Errors</h5>
+                            <h3>{{ job.stats.import.import_errors }}</h3>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if job.stats.identification %}
+                <div class="row">
+                    <h3>Identification Statistics</h3>
+                    <div class="col-md-4">
+                        <div class="stat-card bg-success text-white">
+                            <h5>Tier 1 Identified</h5>
+                            <h3>{{ job.stats.identification.tier1_identified }}</h3>
+                            <small>Via metadata matching</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stat-card bg-info text-white">
+                            <h5>Tier 2 Identified</h5>
+                            <h3>{{ job.stats.identification.tier2_identified }}</h3>
+                            <small>Via enhanced matching</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="stat-card bg-primary text-white">
+                            <h5>Tier 3 Identified</h5>
+                            <h3>{{ job.stats.identification.tier3_identified }}</h3>
+                            <small>Via audio analysis</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-3">
+                        <div class="stat-card bg-danger text-white">
+                            <h5>Manual Review Required</h5>
+                            <h3>{{ job.stats.identification.manual_review }}</h3>
+                            <small>Tracks that need human verification</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-3">
+                        <div class="stat-card bg-secondary text-white">
+                            <h5>Total Processed</h5>
+                            <h3>{{ job.stats.identification.total_processed }}</h3>
+                            <small>Total tracks processed</small>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header bg-light">
+                <h2 class="mb-0">Next Steps</h2>
+            </div>
+            <div class="card-body">
+                {% if job.status == 'completed' and job.stats.identification and job.stats.identification.manual_review > 0 %}
+                <p>There are <strong>{{ job.stats.identification.manual_review }}</strong> tracks that require manual review.</p>
+                <a href="/tracks?status=manual_review" class="btn btn-primary">Go to Manual Review</a>
+                {% elif job.status == 'completed' %}
+                <p>All tracks have been successfully processed and identified. No manual review is needed.</p>
+                <a href="/tracks" class="btn btn-primary">View All Tracks</a>
+                {% elif job.status == 'processing' %}
+                <p>This job is still processing. The page will refresh automatically to show updates.</p>
+                {% elif job.status == 'pending' %}
+                <p>This job is pending processing and will start soon. The page will refresh automatically to show updates.</p>
+                {% elif job.status == 'failed' %}
+                <p>This job failed to complete. Please check the error message above and try again.</p>
+                <a href="/pipeline" class="btn btn-primary">Start a New Job</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh the page if job is pending or processing
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if job.status == 'pending' or job.status == 'processing' %}
+            setTimeout(function() {
+                location.reload();
+            }, 5000);  // Refresh every 5 seconds
+            {% endif %}
+        });
+    </script>
+</body>
+</html>
