@@ -16,8 +16,8 @@ from songwriter_id.database.models import Base, Track, SongwriterCredit, Identif
 from songwriter_id.database.setup import test_connection
 from songwriter_id.database.connection import check_all_connections
 
-# Import pipeline for processing catalogs
-from songwriter_id.pipeline import SongwriterIdentificationPipeline
+# Import Job Manager for the scheduler integration
+from songwriter_id.review_interface.job_manager import JobManager
 
 # Create the database instance
 db = SQLAlchemy(model_class=Base)
@@ -42,11 +42,14 @@ def create_app():
     app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max upload size
     app.config['PIPELINE_CONFIG'] = os.environ.get('PIPELINE_CONFIG', 'config/pipeline.yaml')
+    app.config['JOB_SCHEDULER_DIR'] = os.environ.get('JOB_SCHEDULER_DIR', 'data/jobs')
+    
+    # Initialize job manager
+    app.config['job_manager'] = JobManager(jobs_dir=app.config['JOB_SCHEDULER_DIR'])
     
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'catalogs'), exist_ok=True)
-    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'jobs'), exist_ok=True)
     
     # Initialize the database with the app
     db.init_app(app)
@@ -92,10 +95,10 @@ def create_app():
             error_msg = connections.get('main_database', (False, "Unknown connection error"))[1]
             flash(f"Database connection error: {error_msg}", "danger")
             return render_template('error.html', 
-                                   title="Database Connection Error", 
-                                   message=f"Could not connect to the database. Please check your connection settings.",
-                                   details=error_msg,
-                                   connections=connections)
+                               title="Database Connection Error", 
+                               message=f"Could not connect to the database. Please check your connection settings.",
+                               details=error_msg,
+                               connections=connections)
         
         try:
             stats['total_tracks'] = db.session.query(Track).count()
@@ -115,25 +118,9 @@ def create_app():
                 .order_by(Track.updated_at.desc())\
                 .limit(10)
             
-            # Get recent jobs
-            jobs_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'jobs')
-            recent_jobs = []
-            if os.path.exists(jobs_dir):
-                job_files = os.listdir(jobs_dir)
-                job_files = [f for f in job_files if f.endswith('.json')]
-                job_data = []
-                
-                for job_file in job_files:
-                    try:
-                        with open(os.path.join(jobs_dir, job_file), 'r') as f:
-                            job_info = json.load(f)
-                            job_data.append(job_info)
-                    except Exception as e:
-                        app.logger.error(f"Error loading job file {job_file}: {e}")
-                
-                # Sort by timestamp
-                job_data.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-                recent_jobs = job_data[:5]  # Get 5 most recent
+            # Get recent jobs using the job manager
+            job_manager = app.config['job_manager']
+            recent_jobs = job_manager.list_jobs(limit=5)
             
             return render_template('index.html', 
                                 stats=stats, 
@@ -371,10 +358,31 @@ def create_app():
             app.logger.error(f"Error getting disk space info: {e}")
             upload_stats = {'error': str(e)}
         
+        # Get job scheduler directory info
+        job_stats = {}
+        try:
+            job_manager = app.config['job_manager']
+            jobs = job_manager.list_jobs()
+            
+            # Categorize jobs by status
+            status_counts = {}
+            for job in jobs:
+                status = job.get('status', 'unknown')
+                status_counts[status] = status_counts.get(status, 0) + 1
+            
+            job_stats = {
+                'total_jobs': len(jobs),
+                'status_counts': status_counts
+            }
+        except Exception as e:
+            app.logger.error(f"Error getting job stats: {e}")
+            job_stats = {'error': str(e)}
+        
         return render_template('system_status.html', 
                               connections=connections,
                               config_path=app.config['PIPELINE_CONFIG'],
-                              upload_stats=upload_stats)
+                              upload_stats=upload_stats,
+                              job_stats=job_stats)
     
     # New routes for pipeline interface
     @app.route('/pipeline', methods=['GET'])
@@ -391,27 +399,9 @@ def create_app():
                                details=connections.get('main_database', (False, "Unknown"))[1],
                                connections=connections)
         
-        # Get recent jobs
-        jobs = []
-        jobs_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'jobs')
-        if os.path.exists(jobs_dir):
-            try:
-                job_files = [f for f in os.listdir(jobs_dir) if f.endswith('.json')]
-                job_data = []
-                
-                for job_file in job_files:
-                    try:
-                        with open(os.path.join(jobs_dir, job_file), 'r') as f:
-                            job_info = json.load(f)
-                            job_data.append(job_info)
-                    except Exception as e:
-                        app.logger.error(f"Error loading job file {job_file}: {e}")
-                
-                # Sort by timestamp (newest first)
-                job_data.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-                jobs = job_data
-            except Exception as e:
-                app.logger.error(f"Error loading job files: {e}")
+        # Get jobs using the job manager
+        job_manager = app.config['job_manager']
+        jobs = job_manager.list_jobs()
         
         return render_template('pipeline.html', 
                               jobs=jobs, 
@@ -438,20 +428,15 @@ def create_app():
         
         if file:
             try:
-                # Generate a unique job ID
-                job_id = str(uuid.uuid4())
-                
                 # Generate unique filename
                 filename = file.filename.replace(' ', '_')
                 safe_filename = ''.join(c for c in filename if c.isalnum() or c in '._-')
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 unique_filename = f"{timestamp}_{safe_filename}"
                 
-                # Create uploads and jobs directories if they don't exist
+                # Create uploads directory if it doesn't exist
                 uploads_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'catalogs')
-                jobs_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'jobs')
                 os.makedirs(uploads_dir, exist_ok=True)
-                os.makedirs(jobs_dir, exist_ok=True)
                 
                 # Save the uploaded file
                 file_path = os.path.join(uploads_dir, unique_filename)
@@ -460,41 +445,14 @@ def create_app():
                 # Get audio base path if provided
                 audio_base_path = request.form.get('audio_base_path', '')
                 
-                # Save job info
-                job_info = {
-                    'job_id': job_id,
-                    'catalog_file': unique_filename,
-                    'catalog_path': file_path,
-                    'audio_base_path': audio_base_path,
-                    'status': 'pending',
-                    'timestamp': datetime.now().timestamp(),
-                    'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'stats': {},
-                    'connections': {
-                        'database': 'connected' if db_success else 'disconnected',
-                        'musicbrainz': 'connected' if connections.get('musicbrainz_database', (True, None))[0] else 'disconnected'
-                    }
-                }
+                # Submit job to the scheduler using job manager
+                job_manager = app.config['job_manager']
+                job_id = job_manager.submit_job(
+                    catalog_path=file_path,
+                    audio_base_path=audio_base_path
+                )
                 
-                # Save job info to file
-                job_file_path = os.path.join(jobs_dir, f"{job_id}.json")
-                with open(job_file_path, 'w') as f:
-                    json.dump(job_info, f)
-                
-                # Start pipeline processing in a background thread if database is connected
-                if db_success:
-                    import threading
-                    thread = threading.Thread(
-                        target=process_catalog_job,
-                        args=(app, job_id, file_path, audio_base_path, job_file_path)
-                    )
-                    thread.daemon = True
-                    thread.start()
-                    
-                    flash(f'Catalog file uploaded successfully. Job ID: {job_id}', 'success')
-                else:
-                    flash('Database connection error. Job created but not started.', 'warning')
-                
+                flash(f'Catalog file uploaded successfully and submitted to the job scheduler. Job ID: {job_id}', 'success')
                 return redirect(url_for('pipeline_job_status', job_id=job_id))
             
             except Exception as e:
@@ -506,39 +464,34 @@ def create_app():
     @app.route('/pipeline/jobs/<job_id>', methods=['GET'])
     def pipeline_job_status(job_id):
         """Show status of a pipeline job."""
-        job_file_path = os.path.join(app.config['UPLOAD_FOLDER'], 'jobs', f"{job_id}.json")
         connections = app.config.get('CONNECTION_STATUS', {})
+        job_manager = app.config['job_manager']
         
-        if not os.path.exists(job_file_path):
+        # Get job status from the job manager
+        job_info = job_manager.get_job_status(job_id)
+        
+        if job_info.get('status') == 'not_found':
             flash('Job not found', 'error')
             return redirect(url_for('pipeline_interface'))
         
-        try:
-            with open(job_file_path, 'r') as f:
-                job_info = json.load(f)
-                
-            return render_template('job_status.html', 
-                                job=job_info,
-                                connections=connections)
-        except Exception as e:
-            flash(f'Error loading job information: {str(e)}', 'error')
-            return redirect(url_for('pipeline_interface'))
+        # Add auto-refresh for running or pending jobs
+        auto_refresh = job_info.get('status') in ['running', 'pending']
+        
+        return render_template('job_status.html', 
+                            job=job_info,
+                            connections=connections,
+                            auto_refresh=auto_refresh)
     
     @app.route('/pipeline/jobs/<job_id>/json', methods=['GET'])
     def pipeline_job_json(job_id):
         """Return job status as JSON."""
-        job_file_path = os.path.join(app.config['UPLOAD_FOLDER'], 'jobs', f"{job_id}.json")
+        job_manager = app.config['job_manager']
+        job_info = job_manager.get_job_status(job_id)
         
-        if not os.path.exists(job_file_path):
+        if job_info.get('status') == 'not_found':
             return jsonify({'error': 'Job not found'}), 404
         
-        try:
-            with open(job_file_path, 'r') as f:
-                job_info = json.load(f)
-                
-            return jsonify(job_info)
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        return jsonify(job_info)
     
     @app.route('/uploads/<path:filename>')
     def download_file(filename):
@@ -564,78 +517,3 @@ def create_app():
                             connections=app.config.get('CONNECTION_STATUS', {})), 500
     
     return app
-
-
-def process_catalog_job(app, job_id, catalog_path, audio_base_path, job_file_path):
-    """Process a catalog file in the background.
-    
-    Args:
-        app: Flask application context
-        job_id: Unique job ID
-        catalog_path: Path to the catalog file
-        audio_base_path: Base path for audio files
-        job_file_path: Path to the job status file
-    """
-    # Update job status to 'processing'
-    update_job_status(job_file_path, 'processing')
-    
-    try:
-        # Initialize the pipeline with app context
-        with app.app_context():
-            pipeline = SongwriterIdentificationPipeline(
-                config_file=app.config['PIPELINE_CONFIG'],
-                db_connection=app.config['SQLALCHEMY_DATABASE_URI']
-            )
-            
-            # Check if the pipeline is ready
-            if not pipeline.is_ready:
-                error_msg = "Pipeline initialization failed due to connection issues. Check database connections."
-                update_job_status(job_file_path, 'failed', {'error': error_msg})
-                return
-            
-            # Process the catalog
-            stats = pipeline.process_catalog(
-                catalog_path=catalog_path,
-                audio_base_path=audio_base_path
-            )
-            
-            # Update job status to 'completed' with stats
-            update_job_status(job_file_path, 'completed', stats)
-            
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        app.logger.error(f"Error processing catalog: {e}")
-        app.logger.error(error_details)
-        
-        # Update job status to 'failed'
-        update_job_status(job_file_path, 'failed', {'error': str(e), 'details': error_details})
-
-
-def update_job_status(job_file_path, status, stats=None):
-    """Update the status of a pipeline job.
-    
-    Args:
-        job_file_path: Path to the job status file
-        status: New status ('pending', 'processing', 'completed', 'failed')
-        stats: Statistics to include in the job info
-    """
-    try:
-        # Read current job info
-        with open(job_file_path, 'r') as f:
-            job_info = json.load(f)
-        
-        # Update status and stats
-        job_info['status'] = status
-        job_info['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        if stats:
-            job_info['stats'] = stats
-        
-        # Save updated job info
-        with open(job_file_path, 'w') as f:
-            json.dump(job_info, f)
-            
-    except Exception as e:
-        # Log error but don't raise
-        print(f"Error updating job status: {e}")
