@@ -10,3 +10,6 @@ venv
 .vscode
 
 *.csv
+
+uploads/catalogs/*.csv
+uploads/jobs/*.json
