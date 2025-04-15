@@ -7,6 +7,7 @@ services:
     volumes:
       - .:/app
       - audio_data:/audio_data
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -20,8 +21,8 @@ services:
       - "5001:5000"
     networks:
       - songwriter-network
-    # Simple command to keep container running without errors while in development
-    command: bash -c "python -m songwriter_id || (echo 'App failed to start, staying alive for debugging' && tail -f /dev/null)"
+    # Run in daemon mode with job scheduler
+    command: python -m songwriter_id --daemon --jobs-dir=/app/data/jobs
     restart: on-failure
 
   db:
@@ -51,14 +52,18 @@ services:
     container_name: songwriter-id-ui
     volumes:
       - .:/app
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy
+      app:
+        condition: service_started
     environment:
       - DATABASE_URL=postgresql://songwriter:password@db:5432/songwriter_db
       - FLASK_APP=songwriter_id.review_interface
       - FLASK_ENV=development
       - SECRET_KEY=dev_key_change_in_production
+      - JOB_SCHEDULER_DIR=/app/data/jobs
     ports:
       - "8080:5000"
     networks:
