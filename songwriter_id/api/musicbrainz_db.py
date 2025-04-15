@@ -1,8 +1,7 @@
 """MusicBrainz database integration for songwriter identification."""
 
 import logging
-import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +18,7 @@ class MusicBrainzDatabaseClient:
     LYRICIST_ROLES = ["lyricist"]
     ARRANGER_ROLES = ["arranger"]
     PRODUCER_ROLES = ["producer"]
-    
+
     # Define publisher types
     PUBLISHER_TYPES = ["publisher", "publishing company"]
 
@@ -32,7 +31,7 @@ class MusicBrainzDatabaseClient:
             max_overflow: Maximum overflow connections (default: 10)
         """
         self.db_connection_string = db_connection_string
-        
+
         # Create database engine with connection pooling
         self.engine = create_engine(
             db_connection_string,
@@ -42,9 +41,11 @@ class MusicBrainzDatabaseClient:
             pool_pre_ping=True  # Verify connections before using them
         )
         self.Session = sessionmaker(bind=self.engine)
-        
-        logger.info(f"Initialized MusicBrainzDatabaseClient with connection to {db_connection_string}")
-        logger.info(f"Connection pool settings: pool_size={pool_size}, max_overflow={max_overflow}")
+
+        logger.info(
+            f"Initialized MusicBrainzDatabaseClient with connection to {db_connection_string}")
+        logger.info(
+            f"Connection pool settings: pool_size={pool_size}, max_overflow={max_overflow}")
 
     def search_recording(self, title: str, artist: str, limit: int = 10) -> List[Dict]:
         """Search for recordings matching the title and artist.
@@ -59,7 +60,7 @@ class MusicBrainzDatabaseClient:
         """
         try:
             session = self.Session()
-            
+
             # Build the SQL query to match recordings
             query = text("""
                 SELECT
@@ -83,20 +84,20 @@ class MusicBrainzDatabaseClient:
                     LOWER(a.name) LIKE LOWER(:artist)
                 LIMIT :limit
             """)
-            
+
             params = {
                 'title': f'%{title}%',
                 'artist': f'%{artist}%',
                 'limit': limit
             }
-            
+
             result = session.execute(query, params).fetchall()
-            
+
             # Convert result to list of dictionaries
             recordings = []
             for row in result:
-                recording_dict = dict(row)
-                
+                recording_dict = dict(row._mapping)
+
                 # Add artist credit in the same format as API client
                 artist_credit = [{
                     'artist': {
@@ -106,12 +107,13 @@ class MusicBrainzDatabaseClient:
                     'name': recording_dict.pop('artist_credit_name')
                 }]
                 recording_dict['artist-credit'] = artist_credit
-                
+
                 # Get releases for this recording
-                recording_dict['release-list'] = self._get_releases_for_recording(session, recording_dict['id'])
-                
+                recording_dict['release-list'] = self._get_releases_for_recording(
+                    session, recording_dict['id'])
+
                 recordings.append(recording_dict)
-            
+
             return recordings
         except Exception as e:
             logger.error(f"MusicBrainz database search_recording error: {e}")
@@ -121,11 +123,11 @@ class MusicBrainzDatabaseClient:
 
     def _get_releases_for_recording(self, session, recording_id: str) -> List[Dict]:
         """Get releases for a recording.
-        
+
         Args:
             session: Database session
             recording_id: MusicBrainz recording ID
-            
+
         Returns:
             List of releases
         """
@@ -144,15 +146,16 @@ class MusicBrainzDatabaseClient:
                 WHERE
                     t.recording = :recording_id
             """)
-            
-            result = session.execute(query, {'recording_id': recording_id}).fetchall()
-            return [dict(row) for row in result]
+
+            result = session.execute(
+                query, {'recording_id': recording_id}).fetchall()
+            return [dict(row._mapping) for row in result]
         except Exception as e:
             logger.error(f"Error getting releases for recording: {e}")
             return []
 
-    def search_recording_advanced(self, title: str, artist: str, release: Optional[str] = None, 
-                               limit: int = 10) -> List[Dict]:
+    def search_recording_advanced(self, title: str, artist: str, release: Optional[str] = None,
+                                  limit: int = 10) -> List[Dict]:
         """Advanced search for recordings with additional parameters.
 
         Args:
@@ -166,7 +169,7 @@ class MusicBrainzDatabaseClient:
         """
         try:
             session = self.Session()
-            
+
             # Start building the query
             query_str = """
                 SELECT
@@ -185,20 +188,20 @@ class MusicBrainzDatabaseClient:
                 JOIN
                     artist a ON a.id = acn.artist
             """
-            
+
             params = {}
             where_clauses = []
-            
+
             # Add title filter
             if title:
                 where_clauses.append("LOWER(r.name) LIKE LOWER(:title)")
                 params['title'] = f'%{title}%'
-            
+
             # Add artist filter
             if artist:
                 where_clauses.append("LOWER(a.name) LIKE LOWER(:artist)")
                 params['artist'] = f'%{artist}%'
-            
+
             # Add release filter if provided
             if release:
                 query_str += """
@@ -211,24 +214,25 @@ class MusicBrainzDatabaseClient:
                 """
                 where_clauses.append("LOWER(rel.name) LIKE LOWER(:release)")
                 params['release'] = f'%{release}%'
-            
+
             # Add WHERE clause
             if where_clauses:
                 query_str += " WHERE " + " AND ".join(where_clauses)
-            
+
             # Add limit
             query_str += " LIMIT :limit"
             params['limit'] = limit
-            
+
             # Execute query
             query = text(query_str)
             result = session.execute(query, params).fetchall()
-            
+
             # Convert result to list of dictionaries
             recordings = []
             for row in result:
-                recording_dict = dict(row)
-                
+                # Convert RowProxy to dict - use dict(row._mapping) instead of dict(row._mapping)
+                recording_dict = dict(row._mapping)
+
                 # Add artist credit in the same format as API client
                 artist_credit = [{
                     'artist': {
@@ -238,36 +242,39 @@ class MusicBrainzDatabaseClient:
                     'name': recording_dict.pop('artist_credit_name')
                 }]
                 recording_dict['artist-credit'] = artist_credit
-                
+
                 # Get releases for this recording
-                recording_dict['release-list'] = self._get_releases_for_recording(session, recording_dict['id'])
-                
+                recording_dict['release-list'] = self._get_releases_for_recording(
+                    session, recording_dict['id'])
+
                 # Calculate score based on similarity to search terms
-                score = self._calculate_match_score(recording_dict, title, artist, release)
+                score = self._calculate_match_score(
+                    recording_dict, title, artist, release)
                 recording_dict['score'] = score
-                
+
                 recordings.append(recording_dict)
-            
+
             # Sort by score descending
             recordings.sort(key=lambda x: x.get('score', 0), reverse=True)
-            
+
             return recordings
         except Exception as e:
-            logger.error(f"MusicBrainz database search_recording_advanced error: {e}")
+            logger.error(
+                f"MusicBrainz database search_recording_advanced error: {e}")
             return []
         finally:
             session.close()
-    
-    def _calculate_match_score(self, recording: Dict, title: str, artist: str, 
-                              release: Optional[str] = None) -> float:
+
+    def _calculate_match_score(self, recording: Dict, title: str, artist: str,
+                               release: Optional[str] = None) -> float:
         """Calculate a match confidence score for a recording.
-        
+
         Args:
             recording: Recording data from MusicBrainz
             title: Search title
             artist: Search artist
             release: Search release/album title (optional)
-            
+
         Returns:
             Confidence score between 0.0 and 1.0
         """
@@ -275,25 +282,26 @@ class MusicBrainzDatabaseClient:
         title_score = 0.0
         artist_score = 0.0
         release_score = 0.0
-        
+
         # Title match (max 0.5)
         rec_title = recording.get('title', '').lower()
         title_lower = title.lower()
-        
+
         if rec_title == title_lower:
             title_score = 0.5
         elif title_lower in rec_title or rec_title in title_lower:
             title_score = 0.3
-        
+
         # Artist match (max 0.3)
-        rec_artist = recording.get('artist-credit', [{}])[0].get('artist', {}).get('name', '').lower()
+        rec_artist = recording.get(
+            'artist-credit', [{}])[0].get('artist', {}).get('name', '').lower()
         artist_lower = artist.lower()
-        
+
         if rec_artist == artist_lower:
             artist_score = 0.3
         elif artist_lower in rec_artist or rec_artist in artist_lower:
             artist_score = 0.2
-        
+
         # Release match (max 0.2)
         if release and 'release-list' in recording:
             release_lower = release.lower()
@@ -308,10 +316,10 @@ class MusicBrainzDatabaseClient:
         elif not release:
             # No release to match against - give a neutral score
             release_score = 0.1
-        
+
         score = title_score + artist_score + release_score
         return score
-    
+
     def get_recording_by_id(self, recording_id: str) -> Optional[Dict]:
         """Get detailed information about a recording.
 
@@ -323,7 +331,7 @@ class MusicBrainzDatabaseClient:
         """
         try:
             session = self.Session()
-            
+
             # Query recording details
             query = text("""
                 SELECT
@@ -336,41 +344,47 @@ class MusicBrainzDatabaseClient:
                 WHERE
                     r.id = :recording_id
             """)
-            
-            result = session.execute(query, {'recording_id': recording_id}).fetchone()
-            
+
+            result = session.execute(
+                query, {'recording_id': recording_id}).fetchone()
+
             if not result:
                 return None
-                
-            recording_dict = dict(result)
-            
+
+            recording_dict = dict(result._mapping)
+
             # Get artist credit
             artist_credit_id = recording_dict.pop('artist_credit_id')
-            recording_dict['artist-credit'] = self._get_artist_credit(session, artist_credit_id)
-            
+            recording_dict['artist-credit'] = self._get_artist_credit(
+                session, artist_credit_id)
+
             # Get work relationships
-            recording_dict['work-relation-list'] = self._get_work_relations(session, recording_id)
-            
+            recording_dict['work-relation-list'] = self._get_work_relations(
+                session, recording_id)
+
             # Get artist relationships
-            recording_dict['artist-relation-list'] = self._get_artist_relations(session, recording_id)
-            
+            recording_dict['artist-relation-list'] = self._get_artist_relations(
+                session, recording_id)
+
             # Get releases
-            recording_dict['release-list'] = self._get_releases_for_recording(session, recording_id)
-            
+            recording_dict['release-list'] = self._get_releases_for_recording(
+                session, recording_id)
+
             return recording_dict
         except Exception as e:
-            logger.error(f"MusicBrainz database get_recording_by_id error: {e}")
+            logger.error(
+                f"MusicBrainz database get_recording_by_id error: {e}")
             return None
         finally:
             session.close()
-    
+
     def _get_artist_credit(self, session, artist_credit_id: int) -> List[Dict]:
         """Get artist credit information.
-        
+
         Args:
             session: Database session
             artist_credit_id: Artist credit ID
-            
+
         Returns:
             List of artist credit dictionaries
         """
@@ -390,12 +404,13 @@ class MusicBrainzDatabaseClient:
                 ORDER BY
                     acn.position
             """)
-            
-            result = session.execute(query, {'artist_credit_id': artist_credit_id}).fetchall()
-            
+
+            result = session.execute(
+                query, {'artist_credit_id': artist_credit_id}).fetchall()
+
             artist_credits = []
             for row in result:
-                row_dict = dict(row)
+                row_dict = dict(row._mapping)
                 credit = {
                     'artist': {
                         'id': row_dict['artist_id'],
@@ -403,24 +418,24 @@ class MusicBrainzDatabaseClient:
                     },
                     'name': row_dict['credit_name']
                 }
-                
+
                 if row_dict['join_phrase']:
                     credit['joinphrase'] = row_dict['join_phrase']
-                    
+
                 artist_credits.append(credit)
-                
+
             return artist_credits
         except Exception as e:
             logger.error(f"Error getting artist credit: {e}")
             return []
-    
+
     def _get_work_relations(self, session, recording_id: str) -> List[Dict]:
         """Get work relationships for a recording.
-        
+
         Args:
             session: Database session
             recording_id: MusicBrainz recording ID
-            
+
         Returns:
             List of work relation dictionaries
         """
@@ -445,12 +460,13 @@ class MusicBrainzDatabaseClient:
                 ORDER BY
                     lt.name
             """)
-            
-            result = session.execute(query, {'recording_id': recording_id}).fetchall()
-            
+
+            result = session.execute(
+                query, {'recording_id': recording_id}).fetchall()
+
             work_relations = []
             for row in result:
-                row_dict = dict(row)
+                row_dict = dict(row._mapping)
                 relation = {
                     'type': row_dict['link_type'],
                     'work': {
@@ -458,7 +474,7 @@ class MusicBrainzDatabaseClient:
                         'title': row_dict['work_name']
                     }
                 }
-                
+
                 # Add date information if available
                 if row_dict['begin_date_year']:
                     relation['begin'] = f"{row_dict['begin_date_year']}"
@@ -466,28 +482,28 @@ class MusicBrainzDatabaseClient:
                         relation['begin'] += f"-{row_dict['begin_date_month']:02d}"
                         if row_dict['begin_date_day']:
                             relation['begin'] += f"-{row_dict['begin_date_day']:02d}"
-                
+
                 if row_dict['end_date_year']:
                     relation['end'] = f"{row_dict['end_date_year']}"
                     if row_dict['end_date_month']:
                         relation['end'] += f"-{row_dict['end_date_month']:02d}"
                         if row_dict['end_date_day']:
                             relation['end'] += f"-{row_dict['end_date_day']:02d}"
-                
+
                 work_relations.append(relation)
-                
+
             return work_relations
         except Exception as e:
             logger.error(f"Error getting work relations: {e}")
             return []
-    
+
     def _get_artist_relations(self, session, recording_id: str) -> List[Dict]:
         """Get artist relationships for a recording.
-        
+
         Args:
             session: Database session
             recording_id: MusicBrainz recording ID
-            
+
         Returns:
             List of artist relation dictionaries
         """
@@ -510,12 +526,13 @@ class MusicBrainzDatabaseClient:
                 ORDER BY
                     lt.name
             """)
-            
-            result = session.execute(query, {'recording_id': recording_id}).fetchall()
-            
+
+            result = session.execute(
+                query, {'recording_id': recording_id}).fetchall()
+
             artist_relations = []
             for row in result:
-                row_dict = dict(row)
+                row_dict = dict(row._mapping)
                 relation = {
                     'type': row_dict['link_type'],
                     'artist': {
@@ -523,69 +540,68 @@ class MusicBrainzDatabaseClient:
                         'name': row_dict['artist_name']
                     }
                 }
-                
+
                 artist_relations.append(relation)
-                
+
             return artist_relations
         except Exception as e:
             logger.error(f"Error getting artist relations: {e}")
             return []
-    
+
     def get_work_by_id(self, work_id: str) -> Optional[Dict]:
-        """Get detailed information about a work.
-
-        Args:
-            work_id: MusicBrainz work ID
-
-        Returns:
-            Work information or None
-        """
+        """Get detailed information about a work."""
         try:
             session = self.Session()
-            
-            # Query work details
+
+            # Modified query to join with the iswc table
             query = text("""
                 SELECT
                     w.id AS id,
                     w.name AS name,
                     w.type AS type,
-                    w.iswc AS iswc,
-                    wt.name AS type_name
+                    wt.name AS type_name,
+                    i.iswc AS iswc
                 FROM
                     work w
                 LEFT JOIN
                     work_type wt ON w.type = wt.id
+                LEFT JOIN
+                    iswc i ON i.work = w.id
                 WHERE
                     w.id = :work_id
             """)
-            
+
             result = session.execute(query, {'work_id': work_id}).fetchone()
-            
+
             if not result:
                 return None
-                
-            work_dict = dict(result)
-            
+
+            # Fix the row mapping issue
+            work_dict = dict(result._mapping) if hasattr(
+                result, '_mapping') else dict(result)
+
             # Get artist relationships (composers, lyricists, etc.)
-            work_dict['artist-relation-list'] = self._get_work_artist_relations(session, work_id)
-            
+            work_dict['artist-relation-list'] = self._get_work_artist_relations(
+                session, work_id)
+
             # Get label relationships (publishers)
-            work_dict['label-relation-list'] = self._get_work_label_relations(session, work_id)
-            
+            work_dict['label-relation-list'] = self._get_work_label_relations(
+                session, work_id)
+
             return work_dict
         except Exception as e:
             logger.error(f"MusicBrainz database get_work_by_id error: {e}")
             return None
         finally:
             session.close()
-    
+
     def _get_work_artist_relations(self, session, work_id: str) -> List[Dict]:
         """Get artist relationships for a work.
-        
+
         Args:
             session: Database session
             work_id: MusicBrainz work ID
-            
+
         Returns:
             List of artist relation dictionaries
         """
@@ -608,12 +624,12 @@ class MusicBrainzDatabaseClient:
                 ORDER BY
                     lt.name
             """)
-            
+
             result = session.execute(query, {'work_id': work_id}).fetchall()
-            
+
             artist_relations = []
             for row in result:
-                row_dict = dict(row)
+                row_dict = dict(row._mapping)
                 relation = {
                     'type': row_dict['link_type'],
                     'artist': {
@@ -621,21 +637,21 @@ class MusicBrainzDatabaseClient:
                         'name': row_dict['artist_name']
                     }
                 }
-                
+
                 artist_relations.append(relation)
-                
+
             return artist_relations
         except Exception as e:
             logger.error(f"Error getting work artist relations: {e}")
             return []
-    
+
     def _get_work_label_relations(self, session, work_id: str) -> List[Dict]:
         """Get label (publisher) relationships for a work.
-        
+
         Args:
             session: Database session
             work_id: MusicBrainz work ID
-            
+
         Returns:
             List of label relation dictionaries
         """
@@ -658,12 +674,12 @@ class MusicBrainzDatabaseClient:
                 ORDER BY
                     lt.name
             """)
-            
+
             result = session.execute(query, {'work_id': work_id}).fetchall()
-            
+
             label_relations = []
             for row in result:
-                row_dict = dict(row)
+                row_dict = dict(row._mapping)
                 relation = {
                     'type': row_dict['link_type'],
                     'label': {
@@ -671,9 +687,9 @@ class MusicBrainzDatabaseClient:
                         'name': row_dict['label_name']
                     }
                 }
-                
+
                 label_relations.append(relation)
-                
+
             return label_relations
         except Exception as e:
             logger.error(f"Error getting work label relations: {e}")
@@ -690,29 +706,29 @@ class MusicBrainzDatabaseClient:
         """
         try:
             session = self.Session()
-            
+
             # Get recording info with work relationships
             recording = self.get_recording_by_id(recording_id)
-            
+
             if not recording:
                 return []
-                
+
             credits = []
-            
+
             # Extract works
             for work_rel in recording.get('work-relation-list', []):
                 if 'work' in work_rel:
                     work_id = work_rel['work']['id']
                     work_title = work_rel['work'].get('title', '')
-                    
+
                     # Get work details with relationship information
                     work = self.get_work_by_id(work_id)
-                    
+
                     if work:
                         # Extract artist relationships (composers, lyricists, etc.)
                         for artist_rel in work.get('artist-relation-list', []):
                             role = artist_rel.get('type', '').lower()
-                            
+
                             # Determine standardized role
                             if role in self.COMPOSER_ROLES:
                                 standardized_role = 'composer'
@@ -724,7 +740,7 @@ class MusicBrainzDatabaseClient:
                                 standardized_role = 'producer'
                             else:
                                 standardized_role = role
-                            
+
                             credits.append({
                                 'name': artist_rel['artist']['name'],
                                 'role': standardized_role,
@@ -734,7 +750,7 @@ class MusicBrainzDatabaseClient:
                                 'source': 'musicbrainz_db',
                                 'source_id': work_id
                             })
-                        
+
                         # Extract publisher relationships
                         for label_rel in work.get('label-relation-list', []):
                             rel_type = label_rel.get('type', '').lower()
@@ -748,12 +764,12 @@ class MusicBrainzDatabaseClient:
                                     'source': 'musicbrainz_db',
                                     'source_id': work_id
                                 })
-            
+
             # If no works were found, try to get composer credits directly from recording
             if not credits and 'artist-relation-list' in recording:
                 for artist_rel in recording.get('artist-relation-list', []):
                     role = artist_rel.get('type', '').lower()
-                    
+
                     if role in self.COMPOSER_ROLES + self.LYRICIST_ROLES + self.ARRANGER_ROLES:
                         # Determine standardized role
                         if role in self.COMPOSER_ROLES:
@@ -764,7 +780,7 @@ class MusicBrainzDatabaseClient:
                             standardized_role = 'arranger'
                         else:
                             standardized_role = role
-                        
+
                         credits.append({
                             'name': artist_rel['artist']['name'],
                             'role': standardized_role,
@@ -773,60 +789,61 @@ class MusicBrainzDatabaseClient:
                             'source': 'musicbrainz_db',
                             'source_id': recording_id
                         })
-            
+
             return credits
         except Exception as e:
             logger.error(f"MusicBrainz database get_work_credits error: {e}")
             return []
         finally:
             session.close()
-    
+
     def get_credits_by_title_artist(self, title: str, artist: str, release: Optional[str] = None) -> List[Dict]:
         """Get songwriter credits by searching for title and artist.
-        
+
         Args:
             title: Track title
             artist: Artist name
             release: Release/album title (optional)
-            
+
         Returns:
             List of songwriter credits
         """
         all_credits = []
-        
+
         # Search for recordings
         recordings = self.search_recording_advanced(title, artist, release)
-        
+
         if not recordings:
             logger.info(f"No recordings found for '{title}' by '{artist}'")
             return []
-        
+
         # Process top 3 recording matches (or fewer if less available)
         for i, recording in enumerate(recordings[:3]):
             recording_id = recording.get('id')
             if not recording_id:
                 continue
-                
+
             # Get credits for this recording
             credits = self.get_work_credits(recording_id)
-            
+
             # Adjust confidence based on recording match position
             position_factor = 1.0 if i == 0 else (0.9 if i == 1 else 0.8)
             for credit in credits:
                 # Scale the confidence by position factor and recording score
                 recording_score = recording.get('score', 0.5)
-                credit['confidence_score'] = credit['confidence_score'] * position_factor * recording_score
+                credit['confidence_score'] = credit['confidence_score'] * \
+                    position_factor * recording_score
                 credit['recording_id'] = recording_id
                 credit['recording_title'] = recording.get('title')
-                
+
                 # Also store original search terms for reference
                 credit['search_title'] = title
                 credit['search_artist'] = artist
                 if release:
                     credit['search_release'] = release
-            
+
             all_credits.extend(credits)
-        
+
         # Remove duplicates (same person in same role)
         unique_credits = {}
         for credit in all_credits:
@@ -834,15 +851,15 @@ class MusicBrainzDatabaseClient:
             # Keep the one with highest confidence
             if key not in unique_credits or credit['confidence_score'] > unique_credits[key]['confidence_score']:
                 unique_credits[key] = credit
-        
+
         return list(unique_credits.values())
-    
+
     def get_credits_by_recording_id(self, recording_id: str) -> List[Dict]:
         """Get songwriter credits for a recording by ID.
-        
+
         Args:
             recording_id: MusicBrainz recording ID
-            
+
         Returns:
             List of songwriter credits
         """

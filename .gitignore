@@ -6,3 +6,7 @@ venv
 *.log
 
 *.db
+
+.vscode
+
+*.csv
