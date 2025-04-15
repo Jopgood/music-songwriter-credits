@@ -15,6 +15,21 @@
         .stat-card:hover {
             transform: translateY(-5px);
         }
+        .action-card {
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .action-card:hover {
+            transform: translateY(-5px);
+        }
+        .action-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -34,6 +49,9 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="/tracks?status=manual_review">Manual Review</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pipeline">Pipeline</a>
                     </li>
                 </ul>
             </div>
@@ -66,6 +84,26 @@
                 <div class="stat-card bg-danger text-white">
                     <h3>Manual Review</h3>
                     <h2 class="display-4">{{ stats.manual_review_tracks }}</h2>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Add quick action cards -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="action-card bg-light">
+                    <div class="action-icon text-primary">📥</div>
+                    <h3>Process New Catalog</h3>
+                    <p>Upload and process a new music catalog through the identification pipeline.</p>
+                    <a href="/pipeline" class="btn btn-primary">Go to Pipeline</a>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="action-card bg-light">
+                    <div class="action-icon text-danger">📝</div>
+                    <h3>Manual Review</h3>
+                    <p>Review tracks that couldn't be automatically identified and need human verification.</p>
+                    <a href="/tracks?status=manual_review" class="btn btn-danger">Start Review</a>
                 </div>
             </div>
         </div>
