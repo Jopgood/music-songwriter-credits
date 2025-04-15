@@ -39,6 +39,7 @@ The system follows a modular pipeline architecture that processes tracks sequent
 - **Audio Fingerprinting Service**: Process audio files for content-based matching
 - **Confidence Scoring System**: Evaluate and combine results from multiple sources
 - **Manual Review Interface**: UI for human verification of low-confidence matches
+- **Web Interface**: Full-featured web UI for triggering the pipeline and monitoring results
 
 ## Technology Stack
 
@@ -122,9 +123,31 @@ See the [MusicBrainz Database Integration](docs/musicbrainz_db_integration.md) d
 
 ## Usage
 
-### Importing a Music Catalog
+### Web Interface
 
-The system now includes a robust data ingestion pipeline for importing music catalogs. You can use the command-line script:
+The system includes a comprehensive web interface for managing the identification process:
+
+1. Start the web interface:
+   ```bash
+   python -m songwriter_id.review_interface
+   ```
+
+2. Navigate to http://localhost:5000 in your browser
+
+3. From the web interface, you can:
+   - Upload and process music catalogs
+   - Monitor pipeline progress
+   - View identification statistics
+   - Perform manual review of tracks
+   - Browse all tracks and songwriter credits
+
+For detailed documentation on the web interface, see [Web Interface Documentation](songwriter_id/review_interface/README.md).
+
+### Command-Line Usage
+
+#### Importing a Music Catalog
+
+The system also includes a command-line script for importing music catalogs:
 
 ```bash
 python scripts/import_catalog.py path/to/catalog.csv --audio-path /path/to/audio/files
@@ -136,11 +159,18 @@ Options:
 - `--audio-path`: Base path for audio files
 - `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR)
 
-The script will:
-1. Parse the catalog file (CSV or Excel)
-2. Normalize track metadata (titles, artist names)
-3. Import tracks into the database
-4. Process tracks through the identification tiers
+#### Testing the Pipeline
+
+You can test the pipeline with the included test script:
+
+```bash
+python scripts/test_pipeline.py --catalog data/sample_catalog.csv
+```
+
+Options:
+- `--catalog`: Path to the test catalog file
+- `--config`: Path to the configuration file
+- `--db`: Database connection string
 
 ### Supported Catalog Formats
 
@@ -177,14 +207,6 @@ print(f"Tracks added: {stats['import']['tracks_added']}")
 print(f"Tier 1 identified: {stats['identification']['tier1_identified']}")
 ```
 
-### Running the Manual Review Interface
-
-```
-python -m songwriter_id.review_interface
-```
-
-Then navigate to http://localhost:5000 in your browser.
-
 ## Project Structure
 
 ```
@@ -196,7 +218,8 @@ music-songwriter-credits/
 │   └── musicbrainz_db_integration.md  # MusicBrainz DB integration docs
 ├── notebooks/                  # Jupyter notebooks for exploration
 ├── scripts/                    # Utility scripts
-│   └── import_catalog.py       # Catalog import script
+│   ├── import_catalog.py       # Catalog import script
+│   └── test_pipeline.py        # Pipeline test script
 ├── songwriter_id/              # Main package
 │   ├── __init__.py
 │   ├── api/                    # API integration modules
@@ -212,7 +235,7 @@ music-songwriter-credits/
 │   ├── database/               # Database models and utilities
 │   ├── ml/                     # Machine learning components
 │   ├── pipeline.py             # Main pipeline implementation
-│   └── review_interface/       # Manual review UI
+│   └── review_interface/       # Manual review UI and pipeline interface
 ├── tests/                      # Test suite
 │   └── test_data_ingestion.py  # Tests for data ingestion
 ├── .env.example                # Example environment variables
