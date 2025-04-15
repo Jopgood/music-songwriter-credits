@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Status - Songwriter Credits System</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        .status-card {
+            transition: transform 0.3s;
+            margin-bottom: 20px;
+        }
+        .status-card:hover {
+            transform: translateY(-5px);
+        }
+        .connection-status {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .status-success {
+            background-color: rgba(25, 135, 84, 0.1);
+            border-left: 4px solid #198754;
+        }
+        .status-error {
+            background-color: rgba(220, 53, 69, 0.1);
+            border-left: 4px solid #dc3545;
+        }
+        .details-container {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .system-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/">Songwriter Credits System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracks">All Tracks</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/tracks?status=manual_review">Manual Review</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/pipeline">Pipeline</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/system/status">System Status</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1 class="mb-4">System Status</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card status-card">
+                    <div class="card-header bg-light">
+                        <h2 class="mb-0">Database Connections</h2>
+                    </div>
+                    <div class="card-body">
+                        {% for name, status in connections.items() %}
+                        <div class="connection-status {% if status[0] %}status-success{% else %}status-error{% endif %}">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h4>{{ name|replace('_', ' ')|title }}</h4>
+                                {% if status[0] %}
+                                <span class="badge bg-success">Connected</span>
+                                {% else %}
+                                <span class="badge bg-danger">Disconnected</span>
+                                {% endif %}
+                            </div>
+                            
+                            {% if not status[0] and status[1] %}
+                            <div class="details-container mt-2">{{ status[1] }}</div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                        
+                        <div class="mt-3">
+                            <button id="refreshButton" class="btn btn-primary">
+                                <span id="refreshIcon">🔄</span> Refresh Status
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card status-card">
+                    <div class="card-header bg-light">
+                        <h2 class="mb-0">Configuration</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h5>Pipeline Configuration</h5>
+                            <p><strong>Config Path:</strong> {{ config_path }}</p>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <h5>Upload Storage</h5>
+                            {% if upload_stats.error %}
+                            <div class="alert alert-warning">
+                                Error retrieving storage info: {{ upload_stats.error }}
+                            </div>
+                            {% else %}
+                            <p><strong>Total Size:</strong> {{ upload_stats.size_mb }} MB</p>
+                            <p><strong>Files:</strong> {{ upload_stats.file_count }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card status-card mt-3">
+                    <div class="card-header bg-light">
+                        <h2 class="mb-0">Troubleshooting</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-center mb-4">
+                            <div class="system-icon">🔧</div>
+                            <h4>Common Connection Issues</h4>
+                        </div>
+                        
+                        <div class="accordion" id="troubleshootingAccordion">
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingOne">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="false" aria-controls="collapseOne">
+                                        Songwriter Database Connection Issues
+                                    </button>
+                                </h2>
+                                <div id="collapseOne" class="accordion-collapse collapse" aria-labelledby="headingOne" data-bs-parent="#troubleshootingAccordion">
+                                    <div class="accordion-body">
+                                        <ul>
+                                            <li>Check that the database server is running</li>
+                                            <li>Verify the database connection string in the .env file</li>
+                                            <li>Ensure the database username and password are correct</li>
+                                            <li>Check that the songwriter database exists</li>
+                                            <li>Verify that the correct port is being used (default: 5432)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingTwo">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                                        MusicBrainz Database Connection Issues
+                                    </button>
+                                </h2>
+                                <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#troubleshootingAccordion">
+                                    <div class="accordion-body">
+                                        <ul>
+                                            <li>Verify that the MusicBrainz database is running</li>
+                                            <li>Check the connection string in the pipeline.yaml file</li>
+                                            <li>Ensure the correct port is being used (a common configuration uses port 5434)</li>
+                                            <li>Check that the MusicBrainz database schema is properly loaded</li>
+                                            <li>If not needed, you can disable the MusicBrainz database connection in the pipeline.yaml file and use the API instead</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="headingThree">
+                                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                                        Port Configuration Help
+                                    </button>
+                                </h2>
+                                <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#troubleshootingAccordion">
+                                    <div class="accordion-body">
+                                        <p>If you're running multiple PostgreSQL databases on the same server, you'll need to configure them to use different ports:</p>
+                                        <ul>
+                                            <li>Standard PostgreSQL port: 5432</li>
+                                            <li>Recommended MusicBrainz port: 5434</li>
+                                        </ul>
+                                        <p>Update your connection strings to match your configured ports:</p>
+                                        <pre>postgresql://username:password@localhost:5432/songwriter_db</pre>
+                                        <pre>postgresql://musicbrainz:musicbrainz@localhost:5434/musicbrainz</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const refreshButton = document.getElementById('refreshButton');
+            const refreshIcon = document.getElementById('refreshIcon');
+            
+            if (refreshButton) {
+                refreshButton.addEventListener('click', function() {
+                    // Change icon to show loading
+                    refreshIcon.innerText = '⏳';
+                    refreshButton.disabled = true;
+                    
+                    // Refresh the page
+                    window.location.reload();
+                });
+            }
+        });
+    </script>
+</body>
+</html>

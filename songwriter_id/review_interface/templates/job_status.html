@@ -50,6 +50,9 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/pipeline">Pipeline</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/system/status">System Status</a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -90,8 +93,26 @@
                         {% if job.audio_base_path %}
                         <p><strong>Audio Base Path:</strong> {{ job.audio_base_path }}</p>
                         {% endif %}
+                        
+                        {% if job.connections %}
+                        <p><strong>Database:</strong> 
+                            {% if job.connections.database == 'connected' %}
+                            <span class="badge bg-success">Connected</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disconnected</span>
+                            {% endif %}
+                        </p>
+                        <p><strong>MusicBrainz:</strong> 
+                            {% if job.connections.musicbrainz == 'connected' %}
+                            <span class="badge bg-success">Connected</span>
+                            {% else %}
+                            <span class="badge bg-danger">Disconnected</span>
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                        
                         {% if job.status == 'failed' and job.stats and job.stats.error %}
-                        <div class="alert alert-danger">
+                        <div class="alert alert-danger mt-3">
                             <strong>Error:</strong> {{ job.stats.error }}
                         </div>
                         {% endif %}
@@ -118,6 +139,15 @@
                     </div>
                     {% endif %}
                 </div>
+                
+                {% if job.status == 'failed' and job.stats and job.stats.details %}
+                <div class="mt-4">
+                    <h4>Error Details</h4>
+                    <div class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto; font-family: monospace;">
+                        <pre>{{ job.stats.details }}</pre>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         
@@ -217,6 +247,14 @@
                 <p>This job is pending processing and will start soon. The page will refresh automatically to show updates.</p>
                 {% elif job.status == 'failed' %}
                 <p>This job failed to complete. Please check the error message above and try again.</p>
+                
+                {% if not connections.main_database.0 or (job.connections and job.connections.database == 'disconnected') %}
+                <div class="alert alert-warning mt-3">
+                    <strong>Database Connection Issue:</strong> This job may have failed due to database connection problems.
+                    <a href="/system/status" class="btn btn-sm btn-info mt-2">Check System Status</a>
+                </div>
+                {% endif %}
+                
                 <a href="/pipeline" class="btn btn-primary">Start a New Job</a>
                 {% endif %}
             </div>

@@ -35,6 +35,19 @@
             color: #6c757d;
             margin-bottom: 1rem;
         }
+        .connection-status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .status-success {
+            background-color: rgba(25, 135, 84, 0.1);
+            border-left: 4px solid #198754;
+        }
+        .status-error {
+            background-color: rgba(220, 53, 69, 0.1);
+            border-left: 4px solid #dc3545;
+        }
     </style>
 </head>
 <body>
@@ -58,6 +71,9 @@
                     <li class="nav-item">
                         <a class="nav-link active" href="/pipeline">Pipeline</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/system/status">System Status</a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -66,13 +82,24 @@
     <div class="container">
         <h1 class="mb-4">Songwriter Credits Pipeline</h1>
         
+        {% if not connections.main_database.0 %}
+        <div class="alert alert-danger mb-4">
+            <h4 class="alert-heading">Database Connection Error</h4>
+            <p>The pipeline cannot function without a connection to the main database. Please check your database settings.</p>
+            <hr>
+            <p class="mb-0">Error: {{ connections.main_database.1 }}</p>
+            <a href="/system/status" class="btn btn-outline-danger mt-2">View System Status</a>
+        </div>
+        {% endif %}
+        
         <div class="row mb-4">
-            <div class="col-md-12">
+            <div class="col-md-8">
                 <div class="card">
                     <div class="card-header bg-primary text-white">
                         <h2 class="mb-0">Upload Catalog for Processing</h2>
                     </div>
                     <div class="card-body">
+                        {% if connections.main_database.0 %}
                         <form action="/pipeline/upload" method="post" enctype="multipart/form-data" id="uploadForm">
                             <div class="upload-area" id="dropArea">
                                 <div class="upload-icon">📂</div>
@@ -100,65 +127,166 @@
                                 </button>
                             </div>
                         </form>
+                        {% else %}
+                        <div class="text-center">
+                            <div class="upload-icon">⚠️</div>
+                            <h3>Database Connection Required</h3>
+                            <p>The pipeline requires a connection to the database to function.</p>
+                            <a href="/system/status" class="btn btn-primary mt-2">Check System Status</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0">Connection Status</h3>
+                    </div>
+                    <div class="card-body">
+                        {% for name, status in connections.items() %}
+                        <div class="connection-status {% if status.0 %}status-success{% else %}status-error{% endif %}">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ name|replace('_', ' ')|title }}:</strong>
+                                {% if status.0 %}
+                                <span class="badge bg-success">Connected</span>
+                                {% else %}
+                                <span class="badge bg-danger">Disconnected</span>
+                                {% endif %}
+                            </div>
+                            {% if not status.0 and status.1 %}
+                            <small class="text-muted">{{ status.1 }}</small>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                        
+                        {% if not connections.main_database.0 %}
+                        <div class="mt-3">
+                            <a href="/system/status" class="btn btn-outline-primary btn-sm">
+                                Troubleshooting Help
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-header bg-light">
+                        <h3 class="mb-0">Pipeline Features</h3>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex align-items-center">
+                                <span class="badge bg-primary me-2">1</span>
+                                Metadata matching via MusicBrainz
+                                <span class="ms-auto">
+                                    {% if connections.musicbrainz_database.0 %}
+                                    <span class="badge bg-success">Available</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">Limited</span>
+                                    {% endif %}
+                                </span>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <span class="badge bg-primary me-2">2</span>
+                                Enhanced fuzzy matching
+                                <span class="ms-auto">
+                                    <span class="badge bg-success">Available</span>
+                                </span>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <span class="badge bg-primary me-2">3</span>
+                                Audio fingerprinting
+                                <span class="ms-auto">
+                                    <span class="badge bg-success">Available</span>
+                                </span>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <span class="badge bg-primary me-2">4</span>
+                                Manual review interface
+                                <span class="ms-auto">
+                                    <span class="badge bg-success">Available</span>
+                                </span>
+                            </li>
+                        </ul>
                     </div>
                 </div>
             </div>
         </div>
         
-        <div class="row">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header bg-light">
-                        <h2 class="mb-0">Recent Pipeline Jobs</h2>
-                    </div>
-                    <div class="card-body">
-                        {% if jobs %}
-                        <div class="row">
-                            {% for job in jobs %}
-                            <div class="col-md-6">
-                                <div class="card job-card">
-                                    <div class="card-header d-flex justify-content-between align-items-center">
-                                        <span>Job ID: {{ job.job_id[:8] }}...</span>
-                                        {% if job.status == 'pending' %}
-                                        <span class="badge bg-warning text-dark status-badge">Pending</span>
-                                        {% elif job.status == 'processing' %}
-                                        <span class="badge bg-info status-badge">Processing</span>
-                                        {% elif job.status == 'completed' %}
-                                        <span class="badge bg-success status-badge">Completed</span>
-                                        {% elif job.status == 'failed' %}
-                                        <span class="badge bg-danger status-badge">Failed</span>
+        <div class="card">
+            <div class="card-header bg-light">
+                <h2 class="mb-0">Recent Pipeline Jobs</h2>
+            </div>
+            <div class="card-body">
+                {% if jobs %}
+                <div class="row">
+                    {% for job in jobs %}
+                    <div class="col-md-6">
+                        <div class="card job-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <span>Job ID: {{ job.job_id[:8] }}...</span>
+                                {% if job.status == 'pending' %}
+                                <span class="badge bg-warning text-dark status-badge">Pending</span>
+                                {% elif job.status == 'processing' %}
+                                <span class="badge bg-info status-badge">Processing</span>
+                                {% elif job.status == 'completed' %}
+                                <span class="badge bg-success status-badge">Completed</span>
+                                {% elif job.status == 'failed' %}
+                                <span class="badge bg-danger status-badge">Failed</span>
+                                {% endif %}
+                            </div>
+                            <div class="card-body">
+                                <p><strong>File:</strong> {{ job.catalog_file }}</p>
+                                <p><strong>Created:</strong> {{ job.created_at }}</p>
+                                
+                                {% if job.connections %}
+                                <div class="d-flex small mb-2">
+                                    <div class="me-2">
+                                        <strong>DB:</strong>
+                                        {% if job.connections.database == 'connected' %}
+                                        <span class="text-success">✓</span>
+                                        {% else %}
+                                        <span class="text-danger">✗</span>
                                         {% endif %}
                                     </div>
-                                    <div class="card-body">
-                                        <p><strong>File:</strong> {{ job.catalog_file }}</p>
-                                        <p><strong>Created:</strong> {{ job.created_at }}</p>
-                                        {% if job.stats %}
-                                        <div class="mt-2">
-                                            <strong>Results:</strong>
-                                            <ul class="list-unstyled">
-                                                {% if job.stats.import %}
-                                                <li>Tracks added: {{ job.stats.import.tracks_added }}</li>
-                                                {% endif %}
-                                                {% if job.stats.identification %}
-                                                <li>Identified: {{ job.stats.identification.tier1_identified + job.stats.identification.tier2_identified + job.stats.identification.tier3_identified }}</li>
-                                                <li>Manual review: {{ job.stats.identification.manual_review }}</li>
-                                                {% endif %}
-                                            </ul>
-                                        </div>
+                                    <div>
+                                        <strong>MB:</strong>
+                                        {% if job.connections.musicbrainz == 'connected' %}
+                                        <span class="text-success">✓</span>
+                                        {% else %}
+                                        <span class="text-danger">✗</span>
                                         {% endif %}
-                                    </div>
-                                    <div class="card-footer">
-                                        <a href="/pipeline/jobs/{{ job.job_id }}" class="btn btn-sm btn-primary">View Details</a>
                                     </div>
                                 </div>
+                                {% endif %}
+                                
+                                {% if job.stats %}
+                                <div class="mt-2">
+                                    <strong>Results:</strong>
+                                    <ul class="list-unstyled">
+                                        {% if job.stats.import %}
+                                        <li>Tracks added: {{ job.stats.import.tracks_added }}</li>
+                                        {% endif %}
+                                        {% if job.stats.identification %}
+                                        <li>Identified: {{ job.stats.identification.tier1_identified + job.stats.identification.tier2_identified + job.stats.identification.tier3_identified }}</li>
+                                        <li>Manual review: {{ job.stats.identification.manual_review }}</li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                                {% endif %}
                             </div>
-                            {% endfor %}
+                            <div class="card-footer">
+                                <a href="/pipeline/jobs/{{ job.job_id }}" class="btn btn-sm btn-primary">View Details</a>
+                            </div>
                         </div>
-                        {% else %}
-                        <p class="text-center">No recent pipeline jobs found.</p>
-                        {% endif %}
                     </div>
+                    {% endfor %}
                 </div>
+                {% else %}
+                <p class="text-center">No recent pipeline jobs found.</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -173,78 +301,81 @@
             const fileDetails = document.getElementById('fileDetails');
             const fileName = document.getElementById('fileName');
             
-            // File browse button click
-            browseButton.addEventListener('click', function() {
-                fileInput.click();
-            });
-            
-            // File selection change
-            fileInput.addEventListener('change', function() {
-                handleFiles(this.files);
-            });
-            
-            // Drag and drop events
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                dropArea.addEventListener(eventName, preventDefaults, false);
-            });
-            
-            function preventDefaults(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-            
-            ['dragenter', 'dragover'].forEach(eventName => {
-                dropArea.addEventListener(eventName, highlight, false);
-            });
-            
-            ['dragleave', 'drop'].forEach(eventName => {
-                dropArea.addEventListener(eventName, unhighlight, false);
-            });
-            
-            function highlight() {
-                dropArea.classList.add('bg-light');
-                dropArea.style.borderColor = '#007bff';
-            }
-            
-            function unhighlight() {
-                dropArea.classList.remove('bg-light');
-                dropArea.style.borderColor = '#ccc';
-            }
-            
-            // Handle dropped files
-            dropArea.addEventListener('drop', function(e) {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                handleFiles(files);
-            });
-            
-            // Process the selected files
-            function handleFiles(files) {
-                if (files.length > 0) {
-                    const file = files[0];
-                    // Check if file is CSV or Excel
-                    const validTypes = [
-                        'text/csv', 
-                        'application/vnd.ms-excel',
-                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                    ];
-                    
-                    if (validTypes.includes(file.type) || 
-                        file.name.endsWith('.csv') || 
-                        file.name.endsWith('.xlsx') || 
-                        file.name.endsWith('.xls')) {
+            // Only initialize file upload if dropArea exists
+            if (dropArea) {
+                // File browse button click
+                browseButton.addEventListener('click', function() {
+                    fileInput.click();
+                });
+                
+                // File selection change
+                fileInput.addEventListener('change', function() {
+                    handleFiles(this.files);
+                });
+                
+                // Drag and drop events
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, preventDefaults, false);
+                });
+                
+                function preventDefaults(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, highlight, false);
+                });
+                
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropArea.addEventListener(eventName, unhighlight, false);
+                });
+                
+                function highlight() {
+                    dropArea.classList.add('bg-light');
+                    dropArea.style.borderColor = '#007bff';
+                }
+                
+                function unhighlight() {
+                    dropArea.classList.remove('bg-light');
+                    dropArea.style.borderColor = '#ccc';
+                }
+                
+                // Handle dropped files
+                dropArea.addEventListener('drop', function(e) {
+                    const dt = e.dataTransfer;
+                    const files = dt.files;
+                    handleFiles(files);
+                });
+                
+                // Process the selected files
+                function handleFiles(files) {
+                    if (files.length > 0) {
+                        const file = files[0];
+                        // Check if file is CSV or Excel
+                        const validTypes = [
+                            'text/csv', 
+                            'application/vnd.ms-excel',
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        ];
                         
-                        // Set the file input value
-                        fileInput.files = files;
-                        
-                        // Show file details
-                        fileName.textContent = file.name;
-                        fileDetails.style.display = 'block';
-                        
-                        // Enable the upload button
-                        uploadButton.disabled = false;
-                    } else {
-                        alert('Please select a CSV or Excel file.');
+                        if (validTypes.includes(file.type) || 
+                            file.name.endsWith('.csv') || 
+                            file.name.endsWith('.xlsx') || 
+                            file.name.endsWith('.xls')) {
+                            
+                            // Set the file input value
+                            fileInput.files = files;
+                            
+                            // Show file details
+                            fileName.textContent = file.name;
+                            fileDetails.style.display = 'block';
+                            
+                            // Enable the upload button
+                            uploadButton.disabled = false;
+                        } else {
+                            alert('Please select a CSV or Excel file.');
+                        }
                     }
                 }
             }
