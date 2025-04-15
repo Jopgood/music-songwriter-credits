@@ -3,17 +3,20 @@
 import json
 import logging
 import os
+import sys
 import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import OperationalError
 
 from songwriter_id.database.models import Track, SongwriterCredit, IdentificationAttempt
 from songwriter_id.data_ingestion.parser import CatalogParser
 from songwriter_id.data_ingestion.normalizer import TrackNormalizer
 from songwriter_id.data_ingestion.importer import CatalogImporter
+from songwriter_id.database.connection import verify_database_connection, check_all_connections
 
 # Import MusicBrainz clients
 from songwriter_id.api.musicbrainz import MusicBrainzClient
@@ -49,26 +52,80 @@ class SongwriterIdentificationPipeline:
         """
         self.config_file = config_file
         self.db_connection = db_connection
+        self.connection_status = {}
+        self.is_ready = False  # Flag to indicate if pipeline is ready to run
         
         # Load configuration
         self.config = self._load_config(config_file)
         
+        # Verify database connections before initializing
+        if not self._verify_connections():
+            logger.error("Database connection verification failed. Pipeline initialization incomplete.")
+            return
+            
         # Initialize database connection
-        self.engine = create_engine(db_connection)
-        self.Session = sessionmaker(bind=self.engine)
+        try:
+            self.engine = create_engine(db_connection)
+            self.Session = sessionmaker(bind=self.engine)
+            
+            # Test a simple query to verify connection
+            session = self.Session()
+            session.execute("SELECT 1")
+            session.close()
+            
+            # Initialize data ingestion components
+            self.parser = CatalogParser(
+                field_mapping=self.config.get('field_mapping', None)
+            )
+            self.normalizer = TrackNormalizer()
+            self.importer = CatalogImporter(
+                db_connection=db_connection,
+                normalizer=self.normalizer
+            )
+            
+            # Initialize API clients
+            api_init_success = self._init_api_clients()
+            if not api_init_success:
+                logger.warning("Some API clients failed to initialize, but pipeline can still operate with reduced functionality.")
+            
+            self.is_ready = True
+            logger.info("Pipeline initialized successfully.")
+            
+        except Exception as e:
+            logger.error(f"Error initializing pipeline: {e}")
+            self.is_ready = False
+
+    def _verify_connections(self) -> bool:
+        """Verify all necessary database connections.
         
-        # Initialize data ingestion components
-        self.parser = CatalogParser(
-            field_mapping=self.config.get('field_mapping', None)
-        )
-        self.normalizer = TrackNormalizer()
-        self.importer = CatalogImporter(
-            db_connection=db_connection,
-            normalizer=self.normalizer
-        )
+        Returns:
+            True if all critical connections are available, False otherwise
+        """
+        # Check songwriter database connection (critical)
+        success, error = verify_database_connection(self.db_connection, retry_count=2)
+        self.connection_status['main_database'] = (success, error)
         
-        # Initialize API clients
-        self._init_api_clients()
+        if not success:
+            logger.error(f"Main database connection failed: {error}")
+            logger.error("Pipeline cannot function without main database access.")
+            return False
+            
+        # Check MusicBrainz database if configured (non-critical)
+        mb_config = self.config.get('apis', {}).get('musicbrainz', {})
+        mb_client_type = mb_config.get('client_type', 'api')
+        
+        if mb_client_type == 'database' and mb_config.get('enabled', False):
+            mb_db = mb_config.get('database', {}).get('connection_string', None)
+            if mb_db:
+                success, error = verify_database_connection(mb_db, retry_count=2)
+                self.connection_status['musicbrainz_database'] = (success, error)
+                
+                if not success:
+                    logger.warning(f"MusicBrainz database connection failed: {error}")
+                    logger.warning("Pipeline will function with reduced capabilities.")
+                    # Still return True since this is non-critical
+        
+        return True
 
     def _load_config(self, config_file: str) -> Dict:
         """Load the configuration from a YAML file.
@@ -93,8 +150,14 @@ class SongwriterIdentificationPipeline:
             logger.error(f"Error loading configuration: {e}")
             return {}
     
-    def _init_api_clients(self):
-        """Initialize API clients based on configuration."""
+    def _init_api_clients(self) -> bool:
+        """Initialize API clients based on configuration.
+        
+        Returns:
+            True if all critical clients initialized successfully
+        """
+        success = True
+        
         # Initialize MusicBrainz client
         self.mb_client = None
         mb_config = self.config.get('apis', {}).get('musicbrainz', {})
@@ -114,15 +177,28 @@ class SongwriterIdentificationPipeline:
                     max_overflow = db_config.get('max_overflow', 10)
                     
                     if db_connection_string:
-                        self.mb_client = MusicBrainzDatabaseClient(
-                            db_connection_string=db_connection_string,
-                            pool_size=pool_size,
-                            max_overflow=max_overflow
-                        )
+                        # Check if the connection is available
+                        mb_db_success, _ = self.connection_status.get('musicbrainz_database', (False, None))
+                        
+                        if mb_db_success:
+                            try:
+                                self.mb_client = MusicBrainzDatabaseClient(
+                                    db_connection_string=db_connection_string,
+                                    pool_size=pool_size,
+                                    max_overflow=max_overflow
+                                )
+                                logger.info("MusicBrainz database client initialized successfully.")
+                            except Exception as e:
+                                logger.error(f"Error initializing MusicBrainz database client: {e}")
+                                success = False
+                        else:
+                            logger.warning("MusicBrainz database connection unavailable. Falling back to API client.")
+                            client_type = 'api'  # Fall back to API client
                     else:
                         logger.error("MusicBrainz database client enabled but no connection string provided")
+                        success = False
                 
-            elif client_type == 'api' or (client_type == 'database' and not MUSICBRAINZ_DB_AVAILABLE):
+            if client_type == 'api' or (client_type == 'database' and not MUSICBRAINZ_DB_AVAILABLE) or self.mb_client is None:
                 # Use API client
                 if client_type == 'database' and not MUSICBRAINZ_DB_AVAILABLE:
                     logger.warning("MusicBrainzDatabaseClient not available, falling back to API client")
@@ -130,13 +206,18 @@ class SongwriterIdentificationPipeline:
                 api_config = mb_config.get('api', {})
                 if api_config.get('enabled', True):
                     logger.info("Initializing MusicBrainz API client")
-                    self.mb_client = MusicBrainzClient(
-                        app_name=api_config.get('user_agent', 'SongwriterCreditsIdentifier'),
-                        version=api_config.get('version', '1.0'),
-                        contact=api_config.get('contact', 'contact@example.com'),
-                        rate_limit=api_config.get('rate_limit', 1.0),
-                        retries=api_config.get('retries', 3)
-                    )
+                    try:
+                        self.mb_client = MusicBrainzClient(
+                            app_name=api_config.get('user_agent', 'SongwriterCreditsIdentifier'),
+                            version=api_config.get('version', '1.0'),
+                            contact=api_config.get('contact', 'contact@example.com'),
+                            rate_limit=api_config.get('rate_limit', 1.0),
+                            retries=api_config.get('retries', 3)
+                        )
+                        logger.info("MusicBrainz API client initialized successfully.")
+                    except Exception as e:
+                        logger.error(f"Error initializing MusicBrainz API client: {e}")
+                        success = False
         
         # Initialize AcoustID client if enabled and available
         self.acoustid_client = None
@@ -147,10 +228,15 @@ class SongwriterIdentificationPipeline:
             if api_key:
                 try:
                     self.acoustid_client = AcoustIDClient(api_key)
+                    logger.info("AcoustID client initialized successfully.")
                 except ImportError:
                     logger.warning("AcoustID client initialization failed - library not available")
+                    success = False
             else:
                 logger.warning("AcoustID enabled but no API key provided")
+                success = False
+
+        return success
 
     def process_catalog(self, catalog_path: str, audio_base_path: Optional[str] = None) -> Dict:
         """Process a catalog of tracks to identify songwriter credits.
@@ -163,6 +249,18 @@ class SongwriterIdentificationPipeline:
             Processing statistics
         """
         logger.info(f"Processing catalog from {catalog_path}")
+        
+        # First check if pipeline is ready
+        if not self.is_ready:
+            error_msg = "Pipeline is not properly initialized. Check database connections."
+            logger.error(error_msg)
+            return {"status": "failed", "error": error_msg}
+        
+        # Verify connections again in case they've gone down since initialization
+        if not self._verify_connections():
+            error_msg = "Database connection verification failed. Cannot process catalog."
+            logger.error(error_msg)
+            return {"status": "failed", "error": error_msg}
         
         try:
             # Step 1: Parse the catalog file
@@ -200,6 +298,8 @@ class SongwriterIdentificationPipeline:
             
         except Exception as e:
             logger.error(f"Error processing catalog: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {"status": "failed", "error": str(e)}
 
     def _process_identification_tiers(self) -> Dict:
@@ -507,3 +607,11 @@ class SongwriterIdentificationPipeline:
             logger.error(f"Error recording identification attempt: {e}")
         finally:
             session.close()
+    
+    def get_connection_status(self) -> Dict:
+        """Get the status of all database connections.
+        
+        Returns:
+            Dictionary of connection statuses
+        """
+        return self.connection_status
