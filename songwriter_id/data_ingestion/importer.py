@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, List, Optional, Tuple, Union
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import Session, sessionmaker
 
 from songwriter_id.database.models import Track
@@ -54,9 +54,12 @@ class CatalogImporter:
                     # Normalize the track data
                     normalized_data = self.normalizer.normalize_track_data(track_data)
                     
-                    # Check if track already exists by title and artist
+                    # Check if track already exists by ISRC, title and artist
                     existing_track = self._find_existing_track(
-                        session, normalized_data['title'], normalized_data['artist_name']
+                        session, 
+                        normalized_data.get('isrc'),
+                        normalized_data['title'], 
+                        normalized_data['artist_name']
                     )
                     
                     if existing_track:
@@ -130,38 +133,59 @@ class CatalogImporter:
         Returns:
             True if the track data is valid, False otherwise
         """
-        # Check for required fields (title and artist_name)
-        required_fields = ['title', 'artist_name']
-        for field in required_fields:
-            if field not in track_data or not track_data[field]:
-                logger.warning(f"Missing required field '{field}' in track data")
-                return False
+        # A track must have either:
+        # 1. Both title and artist_name, OR
+        # 2. A valid ISRC code
+        
+        has_title_artist = ('title' in track_data and track_data['title'] and
+                           'artist_name' in track_data and track_data['artist_name'])
+        
+        has_isrc = 'isrc' in track_data and track_data['isrc'] and len(str(track_data['isrc']).strip()) > 8
+        
+        if not (has_title_artist or has_isrc):
+            logger.warning(f"Track data missing required fields: {track_data}")
+            return False
         
         return True
     
-    def _find_existing_track(self, session: Session, title: str, artist_name: str) -> Optional[Track]:
-        """Find an existing track in the database by title and artist.
+    def _find_existing_track(self, session: Session, isrc: Optional[str], title: str, artist_name: str) -> Optional[Track]:
+        """Find an existing track in the database by ISRC, title, and artist.
         
         Args:
             session: Database session
+            isrc: Track ISRC code (normalized, may be None)
             title: Track title (normalized)
             artist_name: Artist name (normalized)
         
         Returns:
             Track object if found, None otherwise
         """
+        # First, try to find by ISRC if provided (most reliable identifier)
+        if isrc:
+            track = session.query(Track).filter(Track.isrc == isrc).first()
+            if track:
+                logger.debug(f"Found track by ISRC: {isrc}")
+                return track
+        
+        # If not found by ISRC or ISRC not provided, try title and artist
         # First try exact match
         track = session.query(Track).filter(
             Track.title == title,
             Track.artist_name == artist_name
         ).first()
         
+        if track:
+            logger.debug(f"Found track by exact title and artist match: {title} - {artist_name}")
+            return track
+        
         # If not found, try case-insensitive match
-        if not track:
-            track = session.query(Track).filter(
-                Track.title.ilike(f"%{title}%"),
-                Track.artist_name.ilike(f"%{artist_name}%")
-            ).first()
+        track = session.query(Track).filter(
+            Track.title.ilike(f"%{title}%"),
+            Track.artist_name.ilike(f"%{artist_name}%")
+        ).first()
+        
+        if track:
+            logger.debug(f"Found track by fuzzy title and artist match: {title} - {artist_name}")
         
         return track
     
@@ -178,6 +202,7 @@ class CatalogImporter:
         track_fields = {
             'title': track_data.get('title', ''),
             'artist_name': track_data.get('artist_name', ''),
+            'isrc': track_data.get('isrc'),
             'release_title': track_data.get('release_title'),
             'duration': track_data.get('duration'),
             'audio_path': track_data.get('audio_path'),
@@ -197,6 +222,9 @@ class CatalogImporter:
         """
         # Only update fields that exist in the track_data and aren't None
         # Don't overwrite existing data with empty values
+        if 'isrc' in track_data and track_data['isrc'] and not track.isrc:
+            track.isrc = track_data['isrc']
+            
         if 'release_title' in track_data and track_data['release_title'] and not track.release_title:
             track.release_title = track_data['release_title']
             
