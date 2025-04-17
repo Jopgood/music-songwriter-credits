@@ -16,6 +16,7 @@ class Track(Base):
     track_id = Column(Integer, primary_key=True)
     title = Column(String(255), nullable=False, index=True)
     artist_name = Column(String(255), nullable=False, index=True)
+    isrc = Column(String(12), nullable=True, index=True)  # Added ISRC field
     release_title = Column(String(255), nullable=True)
     duration = Column(String, nullable=True)
     audio_path = Column(String(512), nullable=True)
