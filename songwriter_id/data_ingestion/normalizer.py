@@ -83,6 +83,10 @@ class TrackNormalizer:
         # Normalize the release title if present
         if 'release_title' in normalized_data and normalized_data['release_title']:
             normalized_data['release_title'] = self.normalize_title(normalized_data['release_title'])
+            
+        # Normalize ISRC if present
+        if 'isrc' in normalized_data and normalized_data['isrc']:
+            normalized_data['isrc'] = self.normalize_isrc(normalized_data['isrc'])
         
         return normalized_data
     
@@ -167,6 +171,29 @@ class TrackNormalizer:
             artist_name = re.sub(pattern, '', artist_name, flags=re.IGNORECASE)
         
         return artist_name.strip()
+    
+    def normalize_isrc(self, isrc: str) -> str:
+        """Normalize an ISRC code.
+        
+        Args:
+            isrc: ISRC code to normalize
+        
+        Returns:
+            Normalized ISRC code
+        """
+        if not isrc:
+            return ""
+            
+        # Convert to string if not already and remove whitespace
+        isrc = str(isrc).strip()
+        
+        # Remove common separators (hyphens, spaces, dots)
+        isrc = re.sub(r'[\s\-\.]', '', isrc)
+        
+        # ISRC should be 12 characters
+        # Format: CC-XXX-YY-NNNNN (Country-Registrant-Year-Number)
+        # Return uppercase ISRC
+        return isrc.upper()
     
     def get_canonical_title(self, title: str) -> str:
         """Get canonical version of the title without version/remix info.
