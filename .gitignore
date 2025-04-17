@@ -13,3 +13,4 @@ venv
 
 uploads/catalogs/*.csv
 uploads/jobs/*.json
+data/jobs/*.status
