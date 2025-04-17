@@ -49,7 +49,13 @@ class CatalogParser:
             'audio_path': 'audio_path',
             'audio path': 'audio_path',
             'file_path': 'audio_path',
-            'file path': 'audio_path'
+            'file path': 'audio_path',
+            
+            # ISRC mappings
+            'isrc': 'track_isrc',
+            'track_isrc': 'track_isrc',
+            'isrc code': 'track_isrc',
+            'international standard recording code': 'track_isrc'
         }
     
     def parse_file(self, file_path: Union[str, Path], audio_base_path: Optional[str] = None) -> List[Dict]:
@@ -153,6 +159,16 @@ class CatalogParser:
                     track['audio_path'] = self._resolve_audio_path(
                         track['audio_path'], audio_base_path
                     )
+        
+        # Clean up ISRC codes (strip whitespace, uppercase)
+        if 'track_isrc' in df.columns:
+            for track in tracks:
+                if track.get('track_isrc'):
+                    # Convert to string in case it's a number
+                    isrc = str(track['track_isrc']).strip().upper()
+                    # Remove common formatting like hyphens or spaces
+                    isrc = isrc.replace('-', '').replace(' ', '')
+                    track['track_isrc'] = isrc
         
         logger.info(f"Successfully parsed catalog with {len(tracks)} tracks")
         return tracks
