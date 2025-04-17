@@ -6,6 +6,8 @@ This script adds an ISRC column to the tracks table in the database
 and ensures proper indexing. Run this script to upgrade an existing database.
 """
 
+from sqlalchemy.engine import Engine
+from sqlalchemy import Column, String, create_engine, text
 import argparse
 import logging
 import os
@@ -15,8 +17,6 @@ from pathlib import Path
 # Add parent directory to path so modules can be imported
 sys.path.append(str(Path(__file__).parent.parent))
 
-from sqlalchemy import Column, String, create_engine, text
-from sqlalchemy.engine import Engine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,10 +24,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("migrate_add_isrc")
 
+
 def add_isrc_column(engine: Engine) -> None:
     """
     Add the ISRC column to the tracks table.
-    
+
     Args:
         engine: SQLAlchemy database engine
     """
@@ -39,35 +40,38 @@ def add_isrc_column(engine: Engine) -> None:
             "WHERE table_name = 'tracks' AND column_name = 'isrc'"
         ))
         column_exists = result.fetchone() is not None
-        
+
         if column_exists:
             logger.info("ISRC column already exists in tracks table")
             return
-        
+
         # Add the ISRC column
         logger.info("Adding ISRC column to tracks table")
         conn.execute(text("ALTER TABLE tracks ADD COLUMN isrc VARCHAR(12)"))
-        
+
         # Create an index on the ISRC column
         logger.info("Creating index on ISRC column")
         conn.execute(text("CREATE INDEX idx_tracks_isrc ON tracks (isrc)"))
-        
+
         # Commit the transaction
         conn.commit()
-        
+
     logger.info("Migration complete: ISRC column added to tracks table")
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Add ISRC column to tracks table")
+    parser = argparse.ArgumentParser(
+        description="Add ISRC column to tracks table")
     parser.add_argument(
-        "--db", 
-        dest="db_connection", 
+        "--db",
+        dest="db_connection",
         help="Database connection string",
-        default=os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/songwriter_db")
+        default=os.environ.get(
+            "EXTERNAL_DATABASE_URL", "postgresql://songwriter:password@localhost:5433/songwriter_db")
     )
-    
+
     args = parser.parse_args()
-    
+
     try:
         engine = create_engine(args.db_connection)
         add_isrc_column(engine)
@@ -77,6 +81,7 @@ def main():
         logger.error(f"Migration failed: {e}")
         print(f"❌ Migration failed: {e}")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
