@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, List, Optional, Tuple, Union
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import Session, sessionmaker
 
 from songwriter_id.database.models import Track
@@ -54,9 +54,12 @@ class CatalogImporter:
                     # Normalize the track data
                     normalized_data = self.normalizer.normalize_track_data(track_data)
                     
-                    # Check if track already exists by title and artist
+                    # Check if track already exists by ISRC or title+artist
                     existing_track = self._find_existing_track(
-                        session, normalized_data['title'], normalized_data['artist_name']
+                        session, 
+                        normalized_data.get('track_isrc'),
+                        normalized_data['title'],
+                        normalized_data['artist_name']
                     )
                     
                     if existing_track:
@@ -139,31 +142,43 @@ class CatalogImporter:
         
         return True
     
-    def _find_existing_track(self, session: Session, title: str, artist_name: str) -> Optional[Track]:
-        """Find an existing track in the database by title and artist.
+    def _find_existing_track(self, session: Session, isrc: Optional[str] = None, 
+                          title: Optional[str] = None, artist_name: Optional[str] = None) -> Optional[Track]:
+        """Find an existing track in the database by ISRC or title+artist.
         
         Args:
             session: Database session
-            title: Track title (normalized)
-            artist_name: Artist name (normalized)
+            isrc: ISRC code (optional)
+            title: Track title (normalized, optional if isrc provided)
+            artist_name: Artist name (normalized, optional if isrc provided)
         
         Returns:
             Track object if found, None otherwise
         """
-        # First try exact match
-        track = session.query(Track).filter(
-            Track.title == title,
-            Track.artist_name == artist_name
-        ).first()
+        # First try to find by ISRC if provided (most reliable identifier)
+        if isrc:
+            track = session.query(Track).filter(Track.track_isrc == isrc).first()
+            if track:
+                return track
         
-        # If not found, try case-insensitive match
-        if not track:
+        # If no ISRC or no match by ISRC, try title and artist
+        if title and artist_name:
+            # Try exact match first
             track = session.query(Track).filter(
-                Track.title.ilike(f"%{title}%"),
-                Track.artist_name.ilike(f"%{artist_name}%")
+                Track.title == title,
+                Track.artist_name == artist_name
             ).first()
+            
+            # If not found, try case-insensitive match
+            if not track:
+                track = session.query(Track).filter(
+                    Track.title.ilike(f"%{title}%"),
+                    Track.artist_name.ilike(f"%{artist_name}%")
+                ).first()
+            
+            return track
         
-        return track
+        return None
     
     def _create_track(self, track_data: Dict) -> Track:
         """Create a new Track object from track data.
@@ -178,6 +193,7 @@ class CatalogImporter:
         track_fields = {
             'title': track_data.get('title', ''),
             'artist_name': track_data.get('artist_name', ''),
+            'track_isrc': track_data.get('track_isrc'),
             'release_title': track_data.get('release_title'),
             'duration': track_data.get('duration'),
             'audio_path': track_data.get('audio_path'),
@@ -205,3 +221,7 @@ class CatalogImporter:
             
         if 'audio_path' in track_data and track_data['audio_path'] and not track.audio_path:
             track.audio_path = track_data['audio_path']
+            
+        # Add ISRC if not already present
+        if 'track_isrc' in track_data and track_data['track_isrc'] and not track.track_isrc:
+            track.track_isrc = track_data['track_isrc']
