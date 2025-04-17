@@ -49,7 +49,15 @@ class CatalogParser:
             'audio_path': 'audio_path',
             'audio path': 'audio_path',
             'file_path': 'audio_path',
-            'file path': 'audio_path'
+            'file path': 'audio_path',
+            
+            # Added ISRC field mapping
+            'isrc': 'isrc',
+            'isrc code': 'isrc',
+            'isrc_code': 'isrc',
+            'international standard recording code': 'isrc',
+            'recording code': 'isrc',
+            'recording_code': 'isrc'
         }
     
     def parse_file(self, file_path: Union[str, Path], audio_base_path: Optional[str] = None) -> List[Dict]:
@@ -154,6 +162,12 @@ class CatalogParser:
                         track['audio_path'], audio_base_path
                     )
         
+        # Standardize ISRC format (remove hyphens, spaces, etc.)
+        if 'isrc' in df.columns:
+            for track in tracks:
+                if track.get('isrc'):
+                    track['isrc'] = self._standardize_isrc(track['isrc'])
+        
         logger.info(f"Successfully parsed catalog with {len(tracks)} tracks")
         return tracks
     
@@ -171,3 +185,30 @@ class CatalogParser:
             return file_path
         
         return os.path.normpath(os.path.join(base_path, file_path))
+    
+    def _standardize_isrc(self, isrc: str) -> str:
+        """Standardize ISRC format by removing separators and ensuring proper format.
+        
+        Args:
+            isrc: ISRC code which may contain hyphens, spaces, etc.
+            
+        Returns:
+            Standardized ISRC code
+        """
+        if not isrc:
+            return ""
+            
+        # Convert to string if not already
+        isrc = str(isrc).strip()
+        
+        # Remove common separators (hyphens, spaces, dots)
+        isrc = isrc.replace('-', '').replace(' ', '').replace('.', '')
+        
+        # ISRC should be 12 characters
+        # Format: CC-XXX-YY-NNNNN (Country-Registrant-Year-Number)
+        # Where CC is 2 chars, XXX is 3 chars, YY is 2 chars, and NNNNN is 5 chars
+        if len(isrc) == 12:
+            return isrc.upper()
+        else:
+            logger.warning(f"Invalid ISRC format: {isrc}")
+            return isrc.upper()

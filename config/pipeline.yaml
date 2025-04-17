@@ -35,6 +35,14 @@ field_mapping:
   audio path: audio_path
   file_path: audio_path
   file path: audio_path
+  
+  # ISRC fields
+  isrc: isrc
+  isrc_code: isrc
+  isrc code: isrc
+  recording code: isrc
+  recording_code: isrc
+  international standard recording code: isrc
 
 # Confidence score thresholds
 confidence_thresholds:
