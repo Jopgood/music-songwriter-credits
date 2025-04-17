@@ -184,6 +184,16 @@ The system will automatically map common column names to standardized fields:
 - Album: 'album', 'release', 'release_title'
 - Duration: 'duration', 'length', 'time'
 - Audio Path: 'file', 'path', 'audio_path'
+- ISRC: 'isrc', 'isrc_code', 'recording_code'
+
+### Track Identification
+
+The system identifies tracks using a combination of:
+1. ISRC (International Standard Recording Code) - primary identifier when available
+2. Title and artist name combination
+3. Fuzzy matching when exact matches are not found
+
+This approach ensures maximum coverage and allows processing of the full 30k catalog with proper deduplication.
 
 ### Processing a Catalog Programmatically
 
